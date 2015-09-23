@@ -17,25 +17,23 @@ import sys
 from dnslib import dnslib
 import smtplib
 
-EMAIL_USERNAME = INSERT_EMAIL_USERNAME_HERE
-EMAIL_PASSWORD = INSERT_EMAIL_PASSWORD_HERE
+EMAIL_USERNAME = "EMAIL_ADDRESS_GOES_HERE"
+EMAIL_PASSWORD = "EMAIL_PASSWORD_GOES_HERE"
+EMAIL_STMPSERVER = "SMTP_SERVER_GOES_HERE"
+def send_email(recipient, subject, body):
 
-def send_email(user, pwd, recipient, subject, body):
-
-	gmail_user = user
-	gmail_pwd = pwd
-	FROM = user
+	FROM = EMAIL_USERNAME
 	TO = [recipient]
 	SUBJECT = subject
 	TEXT = body
 
-	# Prepare actual message
+	#Sending message, first construct actual message
 	message = """\From: %s\nTo: %s\nSubject: %s\n\n%s
 	""" % (FROM, ", ".join(TO), SUBJECT, TEXT)
 	try:
-		server_ssl = smtplib.SMTP_SSL("smtp.gmail.com", 465)
-		server_ssl.ehlo() # optional, called by login()
-		server_ssl.login(gmail_user, gmail_pwd)  
+		server_ssl = smtplib.SMTP_SSL(EMAIL_STMPSERVER, 465)
+		server_ssl.ehlo()
+		server_ssl.login(EMAIL_USERNAME, EMAIL_PASSWORD)  
 		server_ssl.sendmail(FROM, TO, message)
 		server_ssl.close()
 	except:
@@ -57,7 +55,7 @@ def main():
 				c.execute("INSERT INTO foundDomains VALUES ('%s','%s')" % (entry[0],entry[1]))
 				body = body+"\r\n\r\n%s - %s" % (entry[0],entry[1])
 		if body != "":
-			send_email(EMAIL_USERNAME,EMAIL_PASSWORD,row[0],'GFYP - New Entries for %s' % row[1],body) 
+			send_email(row[0],'GFYP - New Entries for %s' % row[1],body) 
 	conn.commit()
 	conn.close()
 

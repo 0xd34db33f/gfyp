@@ -102,7 +102,7 @@ class dnslib:
 		out = []
 		dom = domain.rsplit('.', 1)[0]
 		tld = domain.rsplit('.', 1)[1]
-	
+		#Need to review this, based on the latest tickets for dnstwist this is busted so I'll sub it out for now with a less efficient algorithm.	
 		#for ws in range(0, len(dom)):
 		#	for i in range(0, (len(dom)-ws)+1):
 		#		win = dom[i:i+ws]
