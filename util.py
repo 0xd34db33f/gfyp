@@ -10,6 +10,8 @@ def usage():
 	print "usage - prints this message"
 	print "build - creates a blank database named db.db"
 	print "insert (domain name) (email address) - inserts a new domain to monitor into db.db"
+	print "remove (domain name) - removes a domain from being monitored"
+	print "removeentry (domain name) - removes an identified domain from the found entries"
 
 def build():
         conn = sqlite3.connect('db.db')
@@ -26,10 +28,26 @@ def addDomain():
         conn.commit()
         conn.close()
 
+def removeDomain():
+	conn = sqlite3.connect('db.db')
+        c = conn.cursor()
+        c.execute("DELETE FROM lookupTable WHERE lookupTable.domainName = \"%s\"" % (sys.argv[2]))
+        conn.commit()
+        conn.close()
+
+def removeEntry():
+        conn = sqlite3.connect('db.db')
+        c = conn.cursor()
+        c.execute("DELETE FROM foundDomains WHERE foundDomains.domainName = \"%s\"" % (sys.argv[2]))
+        conn.commit()
+        conn.close()
+
 functions = {
 		'build': build,
      		'usage': usage,
-		'add': addDomain
+		'add': addDomain,
+		'removeentry' : removeEntry,
+		'remove' : removeDomain
 	}
 
 if __name__ == "__main__":
