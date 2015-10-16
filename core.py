@@ -20,6 +20,8 @@ import smtplib
 EMAIL_USERNAME = "EMAIL_ADDRESS_GOES_HERE"
 EMAIL_PASSWORD = "EMAIL_PASSWORD_GOES_HERE"
 EMAIL_STMPSERVER = "SMTP_SERVER_GOES_HERE"
+
+#Code below taken from: http://stackoverflow.com/questions/10147455/trying-to-send-email-gmail-as-mail-provider-using-python
 def send_email(recipient, subject, body):
 
 	FROM = EMAIL_USERNAME

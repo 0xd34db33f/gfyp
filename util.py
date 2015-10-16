@@ -9,7 +9,7 @@ def usage():
 	print "Current supported utility functions:"
 	print "usage - prints this message"
 	print "build - creates a blank database named db.db"
-	print "insert (domain name) (email address) - inserts a new domain to monitor into db.db"
+	print "add (domain name) (email address) - inserts a new domain to monitor into db.db"
 	print "remove (domain name) - removes a domain from being monitored"
 	print "removeentry (domain name) - removes an identified domain from the found entries"
 
