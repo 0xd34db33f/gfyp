@@ -11,7 +11,7 @@ def usage():
 	print "usage - prints this message"
 	print "build - creates a blank database named db.db"
 	print "add (domain name) (email address) - inserts a new domain to monitor into db.db"
-	print "remove (domain name) - removes a domain from being monitored"
+	print "removemonitor (domain name) - removes a domain from being monitored"
 	print "removeentry (domain name) - removes an identified domain from the found entries"
 	print "dump (file name) - Writes the contents of the found domain name table into the file in CSV format"
 
@@ -60,12 +60,12 @@ functions = {
      		'usage': usage,
 		'add': addDomain,
 		'removeentry' : removeEntry,
-		'remove' : removeDomain,
+		'removemonitor' : removeDomain,
 		'dump' : dump
 	}
 
 if __name__ == "__main__":
-	if len(sys.argv) < 2:
+	if len(sys.argv) < 2 or not sys.argv[1] in functions:
 		usage()
 	else:
     		# python util.py (utility function argument) (function parameters space separated)
