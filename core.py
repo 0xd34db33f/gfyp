@@ -56,6 +56,7 @@ def main():
 			if len(entriesIter) == 0:
 				c.execute("INSERT INTO foundDomains VALUES ('%s','%s')" % (entry[0],entry[1]))
 				body = body+"\r\n\r\n%s - %s" % (entry[0],entry[1])
+				conn.commit()
 		if body != "":
 			send_email(row[0],'GFYP - New Entries for %s' % row[1],body) 
 	conn.commit()
