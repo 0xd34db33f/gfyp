@@ -20,7 +20,7 @@
 #Note: this was originally code from dnstwist (https://github.com/elceef/dnstwist). I've since moved it out to an unmodified form that is accompanying this code.
 #See dnstwist.py
 
-from dnstwist import fuzz_domain
+from dnstwist import DomainFuzz
 try:
 	import dns.resolver
 	module_dnspython = True
@@ -41,8 +41,8 @@ class dnslib:
 		self.domains = []
 
 	def checkDomain(self,dnsEntryName):
-		fuzzer = fuzz_domain(dnsEntryName.lower())
-		fuzzer.fuzz()
+		fuzzer = DomainFuzz(dnsEntryName.lower())
+		fuzzer.generate()
 		domains = fuzzer.domains
 	
 		total_hits = 0
@@ -54,33 +54,33 @@ class dnslib:
 				resolv.timeout = 1
 	
 				try:
-					ns = resolv.query(domains[i]['domain'], 'NS')
+					ns = resolv.query(domains[i]['domain-name'], 'NS')
 					domains[i]['ns'] = str(ns[0])[:-1].lower()
 				except:
 					pass
 	
 				if 'ns' in domains[i]:
 					try:
-						ns = resolv.query(domains[i]['domain'], 'A')
+						ns = resolv.query(domains[i]['domain-name'], 'A')
 						domains[i]['a'] = str(ns[0])
 					except:
 						pass
 		
 					try:
-						ns = resolv.query(domains[i]['domain'], 'AAAA')
+						ns = resolv.query(domains[i]['domain-name'], 'AAAA')
 						domains[i]['aaaa'] = str(ns[0])
 					except:
 						pass
 	
 					try:
-						mx = resolv.query(domains[i]['domain'], 'MX')
+						mx = resolv.query(domains[i]['domain-name'], 'MX')
 						domains[i]['mx'] = str(mx[0].exchange)[:-1].lower()
 					except:
 						pass
 	
 			if 'ns' in domains[i] or 'a' in domains[i]:
 				try:
-					whoisdb = whois.query(domains[i]['domain'])
+					whoisdb = whois.query(domains[i]['domain-name'])
 					domains[i]['created'] = str(whoisdb.creation_date).replace(' ', 'T')
 					domains[i]['updated'] = str(whoisdb.last_updated).replace(' ', 'T')
 				except:
@@ -116,6 +116,6 @@ class dnslib:
 					info += ' Updated:' + i['updated']
 	
 			if info:
-				returnDomains.append([i['domain'],info])	
+				returnDomains.append([i['domain-name'],info])	
 	
 		return returnDomains

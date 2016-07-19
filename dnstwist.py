@@ -18,7 +18,7 @@
 # limitations under the License.
 
 __author__ = 'Marcin Ulikowski'
-__version__ = '1.01b'
+__version__ = '1.02'
 __email__ = 'marcin@ulikowski.pl'
 
 import re
@@ -30,6 +30,8 @@ import argparse
 import threading
 from random import randint
 from os import path
+import smtplib
+import json
 
 try:
 	import queue
@@ -71,14 +73,16 @@ except ImportError:
 	pass
 
 DIR = path.abspath(path.dirname(sys.argv[0]))
-FILE_GEOIP = path.join(DIR, 'GeoIP.dat')
-FILE_TLD = path.join(DIR, 'effective_tld_names.dat')
+DIR_DB = 'database'
+FILE_GEOIP = path.join(DIR, DIR_DB, 'GeoIP.dat')
+FILE_TLD = path.join(DIR, DIR_DB, 'effective_tld_names.dat')
 
 DB_GEOIP = path.exists(FILE_GEOIP)
 DB_TLD = path.exists(FILE_TLD)
 
 REQUEST_TIMEOUT_DNS = 5
 REQUEST_TIMEOUT_HTTP = 5
+REQUEST_TIMEOUT_SMTP = 5
 THREAD_COUNT_DEFAULT = 10
 
 if sys.platform != 'win32' and sys.stdout.isatty():
@@ -105,23 +109,27 @@ else:
 	ST_RST = ''
 
 
-def p_out(data):
+def p_cli(data):
 	global args
-	if not args.csv:
+	if not args.csv and not args.json:
 		sys.stdout.write(data)
 		sys.stdout.flush()
 
 
 def p_err(data):
-	global args
-	if not args.csv:
-		sys.stderr.write(data)
-		sys.stderr.flush()
+	sys.stderr.write(path.basename(sys.argv[0]) + ': ' + data)
+	sys.stderr.flush()
 
 
 def p_csv(data):
 	global args
 	if args.csv:
+		sys.stdout.write(data)
+
+
+def p_json(data):
+	global args
+	if args.json:
 		sys.stdout.write(data)
 
 
@@ -140,7 +148,7 @@ def sigint_handler(signal, frame):
 	bye(0)
 
 
-class parse_url():
+class UrlParser():
 
 	def __init__(self, url):
 		if '://' not in url:
@@ -153,7 +161,9 @@ class parse_url():
 		self.path = ''
 		self.query = ''
 
-	def parse(self):
+		self.__parse()
+
+	def __parse(self):
 		re_rfc3986_enhanced = re.compile(
 		r'''
 		^
@@ -177,23 +187,50 @@ class parse_url():
 			if m_uri.group('authority'):
 				self.authority = m_uri.group('authority')
 				self.domain = self.authority.split(':')[0].lower()
+				if not self.__validate_domain(self.domain):
+					raise ValueError('Invalid domain name.')
 			if m_uri.group('path'):
 				self.path = m_uri.group('path')
 			if m_uri.group('query'):
 				if len(m_uri.group('query')):
 					self.query = '?' + m_uri.group('query')
 
+	def __validate_domain(self, domain):
+		if len(domain) > 255:
+			return False
+		if domain[-1] == '.':
+			domain = domain[:-1]
+		allowed = re.compile('\A([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}\Z', re.IGNORECASE)
+		return allowed.match(domain)
+
 	def get_full_uri(self):
 		return self.scheme + '://' + self.domain + self.path + self.query
 
 
-class fuzz_domain():
+class DomainFuzz():
 
 	def __init__(self, domain):
-		if not self.__validate_domain(domain):
-			raise Exception('Invalid domain name')
 		self.domain, self.tld = self.__domain_tld(domain)
 		self.domains = []
+		self.qwerty = {
+		'1': '2q', '2': '3wq1', '3': '4ew2', '4': '5re3', '5': '6tr4', '6': '7yt5', '7': '8uy6', '8': '9iu7', '9': '0oi8', '0': 'po9',
+		'q': '12wa', 'w': '3esaq2', 'e': '4rdsw3', 'r': '5tfde4', 't': '6ygfr5', 'y': '7uhgt6', 'u': '8ijhy7', 'i': '9okju8', 'o': '0plki9', 'p': 'lo0',
+		'a': 'qwsz', 's': 'edxzaw', 'd': 'rfcxse', 'f': 'tgvcdr', 'g': 'yhbvft', 'h': 'ujnbgy', 'j': 'ikmnhu', 'k': 'olmji', 'l': 'kop',
+		'z': 'asx', 'x': 'zsdc', 'c': 'xdfv', 'v': 'cfgb', 'b': 'vghn', 'n': 'bhjm', 'm': 'njk'
+		}
+		self.qwertz = {
+		'1': '2q', '2': '3wq1', '3': '4ew2', '4': '5re3', '5': '6tr4', '6': '7zt5', '7': '8uz6', '8': '9iu7', '9': '0oi8', '0': 'po9',
+		'q': '12wa', 'w': '3esaq2', 'e': '4rdsw3', 'r': '5tfde4', 't': '6zgfr5', 'z': '7uhgt6', 'u': '8ijhz7', 'i': '9okju8', 'o': '0plki9', 'p': 'lo0',
+		'a': 'qwsy', 's': 'edxyaw', 'd': 'rfcxse', 'f': 'tgvcdr', 'g': 'zhbvft', 'h': 'ujnbgz', 'j': 'ikmnhu', 'k': 'olmji', 'l': 'kop',
+		'y': 'asx', 'x': 'ysdc', 'c': 'xdfv', 'v': 'cfgb', 'b': 'vghn', 'n': 'bhjm', 'm': 'njk'
+		}
+		self.azerty = {
+		'1': '2a', '2': '3za1', '3': '4ez2', '4': '5re3', '5': '6tr4', '6': '7yt5', '7': '8uy6', '8': '9iu7', '9': '0oi8', '0': 'po9',
+		'a': '2zq1', 'z': '3esqa2', 'e': '4rdsz3', 'r': '5tfde4', 't': '6ygfr5', 'y': '7uhgt6', 'u': '8ijhy7', 'i': '9okju8', 'o': '0plki9', 'p': 'lo0m',
+		'q': 'zswa', 's': 'edxwqz', 'd': 'rfcxse', 'f': 'tgvcdr', 'g': 'yhbvft', 'h': 'ujnbgy', 'j': 'iknhu', 'k': 'olji', 'l': 'kopm', 'm': 'lp',
+		'w': 'sxq', 'x': 'zsdc', 'c': 'xdfv', 'v': 'cfgb', 'b': 'vghn', 'n': 'bhj'
+		}
+		self.keyboards = [ self.qwerty, self.qwertz, self.azerty ]
 
 	def __domain_tld(self, domain):
 		domain = domain.rsplit('.', 2)
@@ -233,8 +270,8 @@ class fuzz_domain():
 		filtered = []
 
 		for d in self.domains:
-			if self.__validate_domain(d['domain']) and d['domain'] not in seen:
-				seen.add(d['domain'])
+			if self.__validate_domain(d['domain-name']) and d['domain-name'] not in seen:
+				seen.add(d['domain-name'])
 				filtered.append(d)
 
 		self.domains = filtered
@@ -254,8 +291,9 @@ class fuzz_domain():
 
 	def __homoglyph(self):
 		glyphs = {
-		'd': ['b', 'cl'], 'm': ['n', 'nn', 'rn'], 'l': ['1', 'i'], 'o': ['0'],
-		'w': ['vv'], 'n': ['m'], 'b': ['d'], 'i': ['1', 'l'], 'g': ['q'], 'q': ['g']
+		'd': ['b', 'cl', 'dl', 'di'], 'm': ['n', 'nn', 'rn', 'rr'], 'l': ['1', 'i'],
+		'o': ['0'], 'k': ['lk', 'ik', 'lc'], 'h': ['lh', 'ih'], 'w': ['vv'],
+		'n': ['m', 'r'], 'b': ['d', 'lb', 'ib'], 'i': ['1', 'l'], 'g': ['q'], 'q': ['g']
 		}
 		result = []
 
@@ -286,21 +324,16 @@ class fuzz_domain():
 		return result
 
 	def __insertion(self):
-		keys = {
-		'1': '2q', '2': '3wq1', '3': '4ew2', '4': '5re3', '5': '6tr4', '6': '7yt5', '7': '8uy6', '8': '9iu7', '9': '0oi8', '0': 'po9',
-		'q': '12wa', 'w': '3esaq2', 'e': '4rdsw3', 'r': '5tfde4', 't': '6ygfr5', 'y': '7uhgt6', 'u': '8ijhy7', 'i': '9okju8', 'o': '0plki9', 'p': 'lo0',
-		'a': 'qwsz', 's': 'edxzaw', 'd': 'rfcxse', 'f': 'tgvcdr', 'g': 'yhbvft', 'h': 'ujnbgy', 'j': 'ikmnhu', 'k': 'olmji', 'l': 'kop',
-		'z': 'asx', 'x': 'zsdc', 'c': 'xdfv', 'v': 'cfgb', 'b': 'vghn', 'n': 'bhjm', 'm': 'njk'
-		}
 		result = []
 
 		for i in range(1, len(self.domain)-1):
-			if self.domain[i] in keys:
-				for c in range(0, len(keys[self.domain[i]])):
-					result.append(self.domain[:i] + keys[self.domain[i]][c] + self.domain[i] + self.domain[i+1:])
-					result.append(self.domain[:i] + self.domain[i] + keys[self.domain[i]][c] + self.domain[i+1:])
+			for keys in self.keyboards:
+				if self.domain[i] in keys:
+					for c in keys[self.domain[i]]:
+						result.append(self.domain[:i] + c + self.domain[i] + self.domain[i+1:])
+						result.append(self.domain[:i] + self.domain[i] + c + self.domain[i+1:])
 
-		return result
+		return list(set(result))
 
 	def __omission(self):
 		result = []
@@ -325,20 +358,15 @@ class fuzz_domain():
 		return list(set(result))
 
 	def __replacement(self):
-		keys = {
-		'1': '2q', '2': '3wq1', '3': '4ew2', '4': '5re3', '5': '6tr4', '6': '7yt5', '7': '8uy6', '8': '9iu7', '9': '0oi8', '0': 'po9',
-		'q': '12wa', 'w': '3esaq2', 'e': '4rdsw3', 'r': '5tfde4', 't': '6ygfr5', 'y': '7uhgt6', 'u': '8ijhy7', 'i': '9okju8', 'o': '0plki9', 'p': 'lo0',
-		'a': 'qwsz', 's': 'edxzaw', 'd': 'rfcxse', 'f': 'tgvcdr', 'g': 'yhbvft', 'h': 'ujnbgy', 'j': 'ikmnhu', 'k': 'olmji', 'l': 'kop',
-		'z': 'asx', 'x': 'zsdc', 'c': 'xdfv', 'v': 'cfgb', 'b': 'vghn', 'n': 'bhjm', 'm': 'njk'
-		}
 		result = []
 
 		for i in range(0, len(self.domain)):
-			if self.domain[i] in keys:
-				for c in range(0, len(keys[self.domain[i]])):
-					result.append(self.domain[:i] + keys[self.domain[i]][c] + self.domain[i+1:])
+			for keys in self.keyboards:
+				if self.domain[i] in keys:
+					for c in keys[self.domain[i]]:
+						result.append(self.domain[:i] + c + self.domain[i+1:])
 
-		return result
+		return list(set(result))
 
 	def __subdomain(self):
 		result = []
@@ -358,41 +386,111 @@ class fuzz_domain():
 
 		return result
 
-	def fuzz(self):
-		self.domains.append({ 'fuzzer': 'Original*', 'domain': self.domain + '.' + self.tld })
+	def __addition(self):
+		result = []
 
+		for i in range(97, 123):
+			result.append(self.domain + chr(i))
+
+		return result
+
+	def generate(self):
+		self.domains.append({ 'fuzzer': 'Original*', 'domain-name': self.domain + '.' + self.tld })
+
+		for domain in self.__addition():
+			self.domains.append({ 'fuzzer': 'Addition', 'domain-name': domain + '.' + self.tld })
 		for domain in self.__bitsquatting():
-			self.domains.append({ 'fuzzer': 'Bitsquatting', 'domain': domain + '.' + self.tld })
+			self.domains.append({ 'fuzzer': 'Bitsquatting', 'domain-name': domain + '.' + self.tld })
 		for domain in self.__homoglyph():
-			self.domains.append({ 'fuzzer': 'Homoglyph', 'domain': domain + '.' + self.tld })
+			self.domains.append({ 'fuzzer': 'Homoglyph', 'domain-name': domain + '.' + self.tld })
 		for domain in self.__hyphenation():
-			self.domains.append({ 'fuzzer': 'Hyphenation', 'domain': domain + '.' + self.tld })
+			self.domains.append({ 'fuzzer': 'Hyphenation', 'domain-name': domain + '.' + self.tld })
 		for domain in self.__insertion():
-			self.domains.append({ 'fuzzer': 'Insertion', 'domain': domain + '.' + self.tld })
+			self.domains.append({ 'fuzzer': 'Insertion', 'domain-name': domain + '.' + self.tld })
 		for domain in self.__omission():
-			self.domains.append({ 'fuzzer': 'Omission', 'domain': domain + '.' + self.tld })
+			self.domains.append({ 'fuzzer': 'Omission', 'domain-name': domain + '.' + self.tld })
 		for domain in self.__repetition():
-			self.domains.append({ 'fuzzer': 'Repetition', 'domain': domain + '.' + self.tld })
+			self.domains.append({ 'fuzzer': 'Repetition', 'domain-name': domain + '.' + self.tld })
 		for domain in self.__replacement():
-			self.domains.append({ 'fuzzer': 'Replacement', 'domain': domain + '.' + self.tld })
+			self.domains.append({ 'fuzzer': 'Replacement', 'domain-name': domain + '.' + self.tld })
 		for domain in self.__subdomain():
-			self.domains.append({ 'fuzzer': 'Subdomain', 'domain': domain + '.' + self.tld })
+			self.domains.append({ 'fuzzer': 'Subdomain', 'domain-name': domain + '.' + self.tld })
 		for domain in self.__transposition():
-			self.domains.append({ 'fuzzer': 'Transposition', 'domain': domain + '.' + self.tld })
+			self.domains.append({ 'fuzzer': 'Transposition', 'domain-name': domain + '.' + self.tld })
+
+		if not self.domain.startswith('www.'):
+			self.domains.append({ 'fuzzer': 'Various', 'domain-name': 'ww' + self.domain + '.' + self.tld })
+			self.domains.append({ 'fuzzer': 'Various', 'domain-name': 'www' + self.domain + '.' + self.tld })
+			self.domains.append({ 'fuzzer': 'Various', 'domain-name': 'www-' + self.domain + '.' + self.tld })
+		if '.' in self.tld:
+			self.domains.append({ 'fuzzer': 'Various', 'domain-name': self.domain + '.' + self.tld.split('.')[-1] })
+			self.domains.append({ 'fuzzer': 'Various', 'domain-name': self.domain + self.tld })
+		if '.' not in self.tld:
+			self.domains.append({ 'fuzzer': 'Various', 'domain-name': self.domain + self.tld + '.' + self.tld })
+		if self.tld != 'com' and '.' not in self.tld:
+			self.domains.append({ 'fuzzer': 'Various', 'domain-name': self.domain + '-' + self.tld + '.com' })
 
 		self.__filter_domains()
 
 
-class thread_domain(threading.Thread):
+class DomainDict(DomainFuzz):
+
+	def __init__(self, domain):
+		DomainFuzz.__init__(self, domain)
+
+		self.dictionary = []
+
+	def load_dict(self, file):
+		if path.exists(file):
+			for word in open(file):
+				word = word.strip('\n')
+				if word.isalpha() and word not in self.dictionary:
+					self.dictionary.append(word)
+
+	def __dictionary(self):
+		result = []
+
+		domain = self.domain.rsplit('.', 1)
+		if len(domain) > 1:
+			prefix = domain[0] + '.'
+			name = domain[1]
+		else:
+			prefix = ''
+			name = domain[0]
+
+		for word in self.dictionary:
+			result.append(prefix + name + '-' + word)
+			result.append(prefix + name + word)
+			result.append(prefix + word + '-' + name)
+			result.append(prefix + word + name)
+
+		return result
+
+	def generate(self):
+		for domain in self.__dictionary():
+			self.domains.append({ 'fuzzer': 'Dictionary', 'domain-name': domain + '.' + self.tld })
+
+
+class DomainThread(threading.Thread):
 
 	def __init__(self, queue):
 		threading.Thread.__init__(self)
 		self.jobs = queue
 		self.kill_received = False
-		self.orig_domain_ssdeep = ''
+
+		self.ssdeep_orig = ''
+		self.domain_orig = ''
+
 		self.uri_scheme = 'http'
 		self.uri_path = ''
 		self.uri_query = ''
+
+		self.option_extdns = False
+		self.option_geoip = False
+		self.option_whois = False
+		self.option_ssdeep = False
+		self.option_banners = False
+		self.option_mxcheck = False
 
 	def __banner_http(self, ip, vhost):
 		try:
@@ -430,115 +528,215 @@ class thread_domain(threading.Thread):
 				return hello[4:].strip()
 			return hello[:40]
 
+	def __mxcheck(self, mx, from_domain, to_domain):
+		from_addr = 'randombob' + str(randint(1, 9)) + '@' + from_domain
+		to_addr = 'randomalice' + str(randint(1, 9)) + '@' + to_domain
+		try:
+			smtp = smtplib.SMTP(mx, 25, timeout=REQUEST_TIMEOUT_SMTP)
+			smtp.sendmail(from_addr, to_addr, 'And that\'s how the cookie crumbles')
+			smtp.quit()
+		except Exception:
+			return False
+		else:
+			return True
+
 	def stop(self):
 		self.kill_received = True
 
 	def run(self):
 		while not self.kill_received:
 			domain = self.jobs.get()
-			if MODULE_DNSPYTHON:
+
+			if self.option_extdns:
 				resolv = dns.resolver.Resolver()
 				resolv.lifetime = REQUEST_TIMEOUT_DNS
 				resolv.timeout = REQUEST_TIMEOUT_DNS
 
 				try:
-					ans = resolv.query(domain['domain'], 'SOA')
-					domain['ns'] = str(sorted(ans)[0]).split(' ')[0][:-1].lower()
+					ans = resolv.query(domain['domain-name'], 'SOA')
+					domain['dns-ns'] = str(sorted(ans)[0]).split(' ')[0][:-1].lower()
 				except Exception:
 					pass
 
-				if 'ns' in domain:
+				if 'dns-ns' in domain:
 					try:
-						ans = resolv.query(domain['domain'], 'A')
-						domain['a'] = str(sorted(ans)[0])
+						ans = resolv.query(domain['domain-name'], 'A')
+						domain['dns-a'] = str(sorted(ans)[0])
 					except Exception:
 						pass
 
 					try:
-						ans = resolv.query(domain['domain'], 'AAAA')
-						domain['aaaa'] = str(sorted(ans)[0])
+						ans = resolv.query(domain['domain-name'], 'AAAA')
+						domain['dns-aaaa'] = str(sorted(ans)[0])
 					except Exception:
 						pass
 
 					try:
-						ans = resolv.query(domain['domain'], 'MX')
+						ans = resolv.query(domain['domain-name'], 'MX')
 						mx = str(sorted(ans)[0].exchange)[:-1].lower()
-						if mx: domain['mx'] = mx
+						if mx: domain['dns-mx'] = mx
 					except Exception:
 						pass
 			else:
 				try:
-					ip = socket.getaddrinfo(domain['domain'], 80)
+					ip = socket.getaddrinfo(domain['domain-name'], 80)
 				except Exception:
 					pass
 				else:
 					for j in ip:
 						if '.' in j[4][0]:
-							domain['a'] = j[4][0]
+							domain['dns-a'] = j[4][0]
 							break
 					for j in ip:
 						if ':' in j[4][0]:
-							domain['aaaa'] = j[4][0]
+							domain['dns-aaaa'] = j[4][0]
 							break
 
-			if MODULE_WHOIS and args.whois:
-				if 'ns' in domain and 'a' in domain:
+			if self.option_mxcheck:
+				if 'dns-mx' in domain:
+					if domain['domain-name'] is not self.domain_orig: 
+						if self.__mxcheck(domain['dns-mx'], self.domain_orig, domain['domain-name']):
+							domain['mx-spy'] = True
+
+			if self.option_whois:
+				if 'dns-ns' in domain or 'dns-a' in domain:
 					try:
-						whoisdb = whois.query(domain['domain'])
-						domain['created'] = str(whoisdb.creation_date).replace(' ', 'T')
-						domain['updated'] = str(whoisdb.last_updated).replace(' ', 'T')
+						whoisdb = whois.query(domain['domain-name'])
+						domain['whois-created'] = str(whoisdb.creation_date).replace(' ', 'T')
+						domain['whois-updated'] = str(whoisdb.last_updated).replace(' ', 'T')
 					except Exception:
 						pass
 
-			if MODULE_GEOIP and DB_GEOIP and args.geoip:
-				if 'a' in domain:
+			if self.option_geoip:
+				if 'dns-a' in domain:
 					gi = GeoIP.open(FILE_GEOIP, GeoIP.GEOIP_INDEX_CACHE | GeoIP.GEOIP_CHECK_CACHE)
 					try:
-						country = gi.country_name_by_addr(domain['a'])
+						country = gi.country_name_by_addr(domain['dns-a'])
 					except Exception:
 						pass
 					else:
 						if country:
-							domain['country'] = country.split(',')[0]
+							domain['geoip-country'] = country.split(',')[0]
 
-			if args.banners:
-				if 'a' in domain:
-					banner = self.__banner_http(domain['a'], domain['domain'])
+			if self.option_banners:
+				if 'dns-a' in domain:
+					banner = self.__banner_http(domain['dns-a'], domain['domain-name'])
 					if banner:
 						domain['banner-http'] = banner
-				if 'mx' in domain:
-					banner = self.__banner_smtp(domain['mx'])
+				if 'dns-mx' in domain:
+					banner = self.__banner_smtp(domain['dns-mx'])
 					if banner:
 						domain['banner-smtp'] = banner
 
-			if args.ssdeep and MODULE_REQUESTS and MODULE_SSDEEP and self.orig_domain_ssdeep:
-				if 'a' in domain:
+			if self.option_ssdeep:
+				if 'dns-a' in domain:
 					try:
-						req = requests.get(self.uri_scheme + '://' + domain['domain'] + self.uri_path + self.uri_query, timeout=REQUEST_TIMEOUT_HTTP)
-						fuzz_domain_ssdeep = ssdeep.hash(req.text)
+						req = requests.get(self.uri_scheme + '://' + domain['domain-name'] + self.uri_path + self.uri_query, timeout=REQUEST_TIMEOUT_HTTP, headers={'User-Agent': 'Mozilla/5.0 (dnstwist)'})
+						#ssdeep_fuzz = ssdeep.hash(req.text.replace(' ', '').replace('\n', ''))
+						ssdeep_fuzz = ssdeep.hash(req.text)
 					except Exception:
 						pass
 					else:
-						domain['ssdeep'] = ssdeep.compare(self.orig_domain_ssdeep, fuzz_domain_ssdeep)
+						if req.status_code / 100 == 2:
+							domain['ssdeep-score'] = ssdeep.compare(self.ssdeep_orig, ssdeep_fuzz)
 
 			self.jobs.task_done()
 
 
+def generate_json(domains):
+	return json.dumps(domains, indent=4, sort_keys=True)
+
+
+def generate_csv(domains):
+	output = 'fuzzer,domain-name,dns-a,dns-aaaa,dns-mx,dns-ns,geoip-country,whois-created,whois-updated,ssdeep-score\n'
+
+	for domain in domains:
+		output += '%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' % (domain.get('fuzzer'), domain.get('domain-name'), domain.get('dns-a', ''),
+		domain.get('dns-aaaa', ''), domain.get('dns-mx', ''), domain.get('dns-ns', ''), domain.get('geoip-country', ''),
+		domain.get('whois-created', ''), domain.get('whois-updated', ''), str(domain.get('ssdeep-score', '')))
+
+	return output
+
+
+def generate_cli(domains):
+	output = ''
+
+	width_fuzzer = max([len(d['fuzzer']) for d in domains]) + 2
+	width_domain = max([len(d['domain-name']) for d in domains]) + 2
+
+	for domain in domains:
+		info = ''
+
+		if 'dns-a' in domain:
+			info += domain['dns-a']
+			if 'geoip-country' in domain:
+				info += FG_CYA + '/' + domain['geoip-country'] + FG_RST
+			info += ' '
+
+		if 'dns-aaaa' in domain:
+			info += domain['dns-aaaa'] + ' '
+
+		if 'dns-ns' in domain:
+			info += '%sNS:%s%s%s ' % (FG_YEL, FG_CYA, domain['dns-ns'], FG_RST)
+
+		if 'dns-mx' in domain:
+			if 'mx-spy' in domain:
+				info += '%sSPYING-MX:%s%s' % (FG_YEL, domain['dns-mx'], FG_RST)
+			else:
+				info += '%sMX:%s%s%s ' % (FG_YEL, FG_CYA, domain['dns-mx'], FG_RST)
+
+		if 'banner-http' in domain:
+			info += '%sHTTP:%s"%s"%s ' % (FG_YEL, FG_CYA, domain['banner-http'], FG_RST)
+
+		if 'banner-smtp' in domain:
+			info += '%sSMTP:%s"%s"%s ' % (FG_YEL, FG_CYA, domain['banner-smtp'], FG_RST)
+
+		if 'whois-created' in domain and 'whois-updated' in domain:
+			if domain['whois-created'] == domain['whois-updated']:
+				info += '%sCreated/Updated:%s%s%s ' % (FG_YEL, FG_CYA, domain['whois-created'], FG_RST)
+			else:
+				if 'whois-created' in domain:
+					info += '%sCreated:%s%s%s ' % (FG_YEL, FG_CYA, domain['whois-created'], FG_RST)
+				if 'whois-updated' in domain:
+					info += '%sUpdated:%s%s%s ' % (FG_YEL, FG_CYA, domain['whois-updated'], FG_RST)
+
+		if 'ssdeep-score' in domain:
+			if domain['ssdeep-score'] > 0:
+				info += '%sSSDEEP:%d%%%s ' % (FG_YEL, domain['ssdeep-score'], FG_RST)
+
+		info = info.strip()
+
+		if not info:
+			info = '-'
+
+		output += '%s%s%s %s %s\n' % (FG_BLU, domain['fuzzer'].ljust(width_fuzzer), FG_RST, domain['domain-name'].ljust(width_domain), info)
+
+	return output
+
+
 def main():
+	signal.signal(signal.SIGINT, sigint_handler)
+
 	parser = argparse.ArgumentParser(
-	description='''Find similar-looking domain names that adversaries can use to attack you.  
-	Can detect typosquatters, phishing attacks, fraud and corporate espionage. Useful as an
-	additional source of targeted threat intelligence.'''
+	usage='%s [OPTION]... DOMAIN' % sys.argv[0],
+	add_help = True,
+	description=
+	'''Find similar-looking domain names that adversaries can use to attack you. '''
+	'''Can detect typosquatters, phishing attacks, fraud and corporate espionage. '''
+	'''Useful as an additional source of targeted threat intelligence.'''
 	)
 
 	parser.add_argument('domain', help='domain name or URL to check')
 	parser.add_argument('-c', '--csv', action='store_true', help='print output in CSV format')
+	parser.add_argument('-j', '--json', action='store_true', help='print output in JSON format')
 	parser.add_argument('-r', '--registered', action='store_true', help='show only registered domain names')
 	parser.add_argument('-w', '--whois', action='store_true', help='perform lookup for WHOIS creation/update time (slow)')
 	parser.add_argument('-g', '--geoip', action='store_true', help='perform lookup for GeoIP location')
 	parser.add_argument('-b', '--banners', action='store_true', help='determine HTTP and SMTP service banners')
 	parser.add_argument('-s', '--ssdeep', action='store_true', help='fetch web pages and compare their fuzzy hashes to evaluate similarity')
-	parser.add_argument('-t', '--threads', type=int, default=THREAD_COUNT_DEFAULT, help='number of threads to run (default: %d)' % THREAD_COUNT_DEFAULT)
+	parser.add_argument('-m', '--mxcheck', action='store_true', help='check if MX host can be used to intercept e-mails')
+	parser.add_argument('-d', '--dictionary', type=str, metavar='FILE', help='generate additional domains using dictionary FILE')
+	parser.add_argument('-t', '--threads', type=int, metavar='NUMBER', default=THREAD_COUNT_DEFAULT, help='start specified NUMBER of threads (default: %d)' % THREAD_COUNT_DEFAULT)
 
 	if len(sys.argv) < 2:
 		sys.stdout.write('%sdnstwist %s by <%s>%s\n\n' % (ST_BRI, __version__, __email__, ST_RST))
@@ -548,148 +746,159 @@ def main():
 	global args
 	args = parser.parse_args()
 
-	if args.threads < 1 or args.threads > 100:
+	if args.csv and args.json:
+		p_err('error: cannot use both CSV and JSON as output\n')
+		bye(-1)
+
+	if args.threads < 1:
 		args.threads = THREAD_COUNT_DEFAULT
 
-	p_out(ST_BRI + FG_RND +
+	try:
+		url = UrlParser(args.domain)
+	except ValueError as err:
+		p_err('error: %s\n' % err)
+		bye(-1)
+
+	dfuzz = DomainFuzz(url.domain)
+	dfuzz.generate()
+	domains = dfuzz.domains
+
+	if args.dictionary:
+		if not path.exists(args.dictionary):
+			p_err('error: dictionary not found: %s\n' % args.dictionary)
+			bye(-1)
+		ddict = DomainDict(url.domain)
+		ddict.load_dict(args.dictionary)
+		ddict.generate()
+		domains += ddict.domains
+
+	if not DB_TLD:
+		p_err('error: missing TLD database file: %s\n' % FILE_TLD)
+		bye(-1)
+	if not DB_GEOIP and args.geoip:
+		p_err('error: missing GeoIP database file: %\n' % FILE_GEOIP)
+		bye(-1)
+
+	if not MODULE_DNSPYTHON:
+		p_err('notice: missing module: dnspython (DNS features limited)\n')
+	if not MODULE_GEOIP and args.geoip:
+		p_err('notice: missing module: GeoIP (geographical location not available)\n')
+	if not MODULE_WHOIS and args.whois:
+		p_err('notice: missing module: whois (WHOIS database not accessible)\n')
+	if not MODULE_SSDEEP and args.ssdeep:
+		p_err('notice: missing module: ssdeep (fuzzy hashes not available)\n')
+	if not MODULE_REQUESTS and args.ssdeep:
+		p_err('notice: missing module: Requests (web page downloads not possible)\n')
+
+	p_cli(FG_RND + ST_BRI +
 '''     _           _            _     _   
   __| |_ __  ___| |___      _(_)___| |_ 
  / _` | '_ \/ __| __\ \ /\ / / / __| __|
 | (_| | | | \__ \ |_ \ V  V /| \__ \ |_ 
  \__,_|_| |_|___/\__| \_/\_/ |_|___/\__| {%s}
 
-''' % __version__ + FG_RST)
+''' % __version__ + FG_RST + ST_RST)
 
-	url = parse_url(args.domain)
-	url.parse()
-
-	try:
-		fuzzer = fuzz_domain(url.domain)
-	except Exception:
-		p_err(FG_RED + 'ERROR: Invalid domain name!\n\n' + FG_RST)
-		bye(-1)
-
-	signal.signal(signal.SIGINT, sigint_handler)
-
-	fuzzer.fuzz()
-	domains = fuzzer.domains
-
-	if not DB_TLD:
-		p_out(FG_YEL + 'NOTICE: Missing file: ' + FILE_TLD + ' - TLD database not available!\n\n' + FG_RST)
-	if not DB_GEOIP and args.geoip:
-		p_out(FG_YEL + 'NOTICE: Missing file: ' + FILE_GEOIP + ' - geographical location not available!\n\n' + FG_RST)
-	if not MODULE_DNSPYTHON:
-		p_out(FG_YEL + 'NOTICE: Missing module: dnspython - DNS features limited!\n\n' + FG_RST)
-	if not MODULE_GEOIP and args.geoip:
-		p_out(FG_YEL + 'NOTICE: Missing module: GeoIP - geographical location not available!\n\n' + FG_RST)
-	if not MODULE_WHOIS and args.whois:
-		p_out(FG_YEL + 'NOTICE: Missing module: whois - database not accessible!\n\n' + FG_RST)
-	if not MODULE_SSDEEP and args.ssdeep:
-		p_out(FG_YEL + 'NOTICE: Missing module: ssdeep - fuzzy hashes not available!\n\n' + FG_RST)
-	if not MODULE_REQUESTS and args.ssdeep:
-		p_out(FG_YEL + 'NOTICE: Missing module: Requests - web page downloads not possible!\n\n' + FG_RST)
 	if MODULE_WHOIS and args.whois:
-		p_out(FG_YEL + 'NOTICE: Reducing the number of threads to 1 in order to query WHOIS server\n\n' + FG_RST)
+		p_cli('Disabling multithreaded job distribution in order to query WHOIS servers\n')
 		args.threads = 1
 
 	if args.ssdeep and MODULE_SSDEEP and MODULE_REQUESTS:
-		p_out('Fetching content from: ' + url.get_full_uri() + ' ... ')
+		p_cli('Fetching content from: ' + url.get_full_uri() + ' ... ')
 		try:
-			req = requests.get(url.get_full_uri(), timeout=REQUEST_TIMEOUT_HTTP)
+			req = requests.get(url.get_full_uri(), timeout=REQUEST_TIMEOUT_HTTP, headers={'User-Agent': 'Mozilla/5.0 (dnstwist)'})
+		except requests.exceptions.ConnectionError:
+			p_cli('Connection error\n')
+			args.ssdeep = False
+			pass
+		except requests.exceptions.HTTPError:
+			p_cli('Invalid HTTP response\n')
+			args.ssdeep = False
+			pass
+		except requests.exceptions.Timeout:
+			p_cli('Timeout (%d seconds)\n' % REQUEST_TIMEOUT_HTTP)
+			args.ssdeep = False
+			pass
 		except Exception:
-			p_out('Failed!\n')
+			p_cli('Failed!\n')
 			args.ssdeep = False
 			pass
 		else:
-			p_out('%d %s (%d bytes)\n' % (req.status_code, req.reason, len(req.text)))
-			orig_domain_ssdeep = ssdeep.hash(req.text)
+			p_cli('%d %s (%.1f Kbytes)\n' % (req.status_code, req.reason, float(len(req.text))/1000))
+			if req.status_code / 100 == 2:
+				#ssdeep_orig = ssdeep.hash(req.text.replace(' ', '').replace('\n', ''))
+				ssdeep_orig = ssdeep.hash(req.text)
+			else:
+				args.ssdeep = False
 
-	p_out('Processing %d domain variants ' % len(domains))
+	p_cli('Processing %d domain variants ' % len(domains))
 
 	jobs = queue.Queue()
 
 	global threads
 	threads = []
-
-	for i in range(args.threads):
-		worker = thread_domain(jobs)
-		worker.setDaemon(True)
-		worker.uri_scheme = url.scheme
-		worker.uri_path = url.path
-		worker.uri_query = url.query
-		if 'orig_domain_ssdeep' in locals():
-			worker.orig_domain_ssdeep = orig_domain_ssdeep
-		worker.start()
-		threads.append(worker)
-
+	
 	for i in range(len(domains)):
 		jobs.put(domains[i])
 
+	for i in range(args.threads):
+		worker = DomainThread(jobs)
+		worker.setDaemon(True)
+
+		worker.uri_scheme = url.scheme
+		worker.uri_path = url.path
+		worker.uri_query = url.query
+
+		worker.domain_orig = url.domain
+
+		if MODULE_DNSPYTHON:
+			worker.option_extdns = True
+		if MODULE_WHOIS and args.whois:
+			worker.option_whois = True
+		if MODULE_GEOIP and DB_GEOIP and args.geoip:
+			worker.option_geoip = True
+		if args.banners:
+			worker.option_banners = True
+		if args.ssdeep and MODULE_REQUESTS and MODULE_SSDEEP and 'ssdeep_orig' in locals():
+			worker.option_ssdeep = True
+			worker.ssdeep_orig = ssdeep_orig
+		if args.mxcheck:
+			worker.option_mxcheck = True
+
+		worker.start()
+		threads.append(worker)
+
+	qperc = 0
 	while not jobs.empty():
-		p_out('.')
+		p_cli('.')
+		qcurr = 100 * (len(domains) - jobs.qsize()) / len(domains)
+		if qcurr - 20 >= qperc:
+			qperc = qcurr
+			p_cli('%u%%' % qperc)
 		time.sleep(1)
 
 	for worker in threads:
 		worker.stop()
 
-	p_out(' %d hit(s)\n\n' % sum('ns' in d or 'a' in d for d in domains))
+	hits_total = sum('dns-ns' in d or 'dns-a' in d for d in domains)
+	hits_percent = 100 * hits_total / len(domains)
+	p_cli(' %d hits (%d%%)\n\n' % (hits_total, hits_percent))
 	time.sleep(1)
 
-	p_csv('Fuzzer,Domain,A,AAAA,MX,NS,Country,Created,Updated,SSDEEP\n')
+	if args.registered:
+		domains_registered = []
+		for d in domains:
+			if 'dns-ns' in d or 'dns-a' in d:
+				domains_registered.append(d)
+		domains = domains_registered
+		del domains_registered
 
-	width_fuzz = max([len(d['fuzzer']) for d in domains]) + 2
-	width_domain = max([len(d['domain']) for d in domains]) + 2
-
-	for domain in domains:
-		info = ''
-
-		if 'a' in domain:
-			info += domain['a']
-			if 'country' in domain:
-				info += FG_CYA + '/' + domain['country'] + FG_RST
-			info += ' '
-
-		if 'aaaa' in domain:
-			info += domain['aaaa'] + ' '
-
-		if 'ns' in domain:
-			info += '%sNS:%s%s%s ' % (FG_GRE, FG_CYA, domain['ns'], FG_RST)
-
-		if 'mx' in domain:
-			info += '%sMX:%s%s%s ' % (FG_GRE, FG_CYA, domain['mx'], FG_RST)
-
-		if 'banner-http' in domain:
-			info += '%sHTTP:%s"%s"%s ' % (FG_GRE, FG_CYA, domain['banner-http'], FG_RST)
-
-		if 'banner-smtp' in domain:
-			info += '%sSMTP:%s"%s"%s ' % (FG_GRE, FG_CYA, domain['banner-smtp'], FG_RST)
-
-		if 'created' in domain and 'updated' in domain:
-			if domain['created'] == domain['updated']:
-				info += '%sCreated/Updated:%s%s%s ' % (FG_GRE, FG_CYA, domain['created'], FG_RST)
-			else:
-				if 'created' in domain:
-					info += '%sCreated:%s%s%s ' % (FG_GRE, FG_CYA, domain['created'], FG_RST)
-				if 'updated' in domain:
-					info += '%sUpdated:%s%s%s ' % (FG_GRE, FG_CYA, domain['updated'], FG_RST)
-
-		if 'ssdeep' in domain:
-			if domain['ssdeep'] > 0:
-				info += '%sSSDEEP:%s%d%%%s ' % (FG_YEL, FG_CYA, domain['ssdeep'], FG_RST)
-
-		info = info.strip()
-
-		if not info:
-			info = '-'
-
-		if (args.registered and info != '-') or not args.registered:
-			p_out('%s%s%s %s %s\n' % (FG_BLU, domain['fuzzer'].ljust(width_fuzz), FG_RST, domain['domain'].ljust(width_domain), info))
-
-			p_csv(
-			'%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n' % (domain.get('fuzzer'), domain.get('domain'), domain.get('a', ''),
-			domain.get('aaaa', ''), domain.get('mx', ''), domain.get('ns', ''), domain.get('country', ''),
-			domain.get('created', ''), domain.get('updated', ''), str(domain.get('ssdeep', '')))
-			)
+	if args.csv:
+		p_csv(generate_csv(domains))
+	elif args.json:
+		p_json(generate_json(domains))
+	else:
+		p_cli(generate_cli(domains))
 
 	bye(0)
 
