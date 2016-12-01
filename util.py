@@ -1,10 +1,12 @@
 #!/usr/bin/python
+"""A utility for maintaining the GFYP database."""
 
 import sqlite3
 import sys
 import csv
 
 def usage():
+    """Print usage info."""
     print("GFYP Utilities\n"
           "python utils.py (utility function argument) (function parameters "
           "space separated)\n"
@@ -20,24 +22,25 @@ def usage():
           "table into the file in CSV format")
 
 def dump():
-    with open(sys.argv[2],'wb') as csvfile:
+    """Write database to CSV file."""
+    with open(sys.argv[2], 'wb') as csvfile:
         csvoutput = csv.writer(csvfile)
         conn = sqlite3.connect('db.db')
-        c = conn.cursor()
-        foundEntries = c.execute("SELECT * FROM foundDomains")
-        entriesIter = foundEntries.fetchall()
-        for entryItem in entriesIter:
-            csvoutput.writerow(entryItem)
+        cur = conn.cursor()
+        found_entries = cur.execute("SELECT * FROM foundDomains")
+        entries_iter = found_entries.fetchall()
+        for entry in entries_iter:
+            csvoutput.writerow(entry)
         conn.close()
 
 def sql_execute(stmt, arglist=None):
     """Execute the SQL statement."""
     conn = sqlite3.connect('db.db')
-    c = conn.cursor()
+    cur = conn.cursor()
     if arglist is not None:
-        c.execute(stmt, arglist)
+        cur.execute(stmt, arglist)
     else:
-        c.execute(stmt)
+        cur.execute(stmt)
     conn.commit()
     conn.close()
 
@@ -46,31 +49,34 @@ def build():
     sql_execute("CREATE TABLE lookupTable(emailAddy text,domainName text)")
     sql_execute("CREATE TABLE foundDomains(domainName text, info text)")
 
-def addDomain():
+def add_domain():
+    """Inserts a new domain to monitor"""
     stmt = "INSERT INTO lookupTable VALUES (?, ?)"
-    arglist = (sys.argv[3],sys.argv[2])
+    arglist = (sys.argv[3], sys.argv[2])
     sql_execute(stmt, arglist)
 
-def removeDomain():
+def remove_domain():
+    """Removes a domain from being monitored"""
     stmt = "DELETE FROM lookupTable WHERE lookupTable.domainName = ?"
     arglist = (sys.argv[2])
     sql_execute(stmt, arglist)
 
-def removeEntry():
+def remove_entry():
+    """Removes an identified domain from the list of found entries"""
     stmt = "DELETE FROM foundDomains WHERE foundDomains.domainName = ?"
     arglist = sys.argv[2]
     sql_execute(stmt, arglist)
 
-functions = {'build': build,
+FUNCTIONS = {'build': build,
              'usage': usage,
-             'add': addDomain,
-             'removeentry' : removeEntry,
-             'removemonitor' : removeDomain,
+             'add': add_domain,
+             'removeentry' : remove_entry,
+             'removemonitor' : remove_domain,
              'dump' : dump}
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2 or not sys.argv[1] in functions:
+    if len(sys.argv) < 2 or sys.argv[1] not in FUNCTIONS:
         usage()
     else:
         # python util.py (utility function argument) (function parameters space separated)
-        functions[sys.argv[1]]()
+        FUNCTIONS[sys.argv[1]]()
