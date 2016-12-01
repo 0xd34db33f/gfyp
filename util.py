@@ -5,15 +5,19 @@ import sys
 import csv
 
 def usage():
-    print "GFYP Utilities"
-    print "python utils.py (utility function argument) (function parameters space separated)"
-    print "Current supported utility functions:"
-    print "usage - prints this message"
-    print "build - creates a blank database named db.db"
-    print "add (domain name) (email address) - inserts a new domain to monitor into db.db"
-    print "removemonitor (domain name) - removes a domain from being monitored"
-    print "removeentry (domain name) - removes an identified domain from the found entries"
-    print "dump (file name) - Writes the contents of the found domain name table into the file in CSV format"
+    print("GFYP Utilities\n"
+          "python utils.py (utility function argument) (function parameters "
+          "space separated)\n"
+          "Current supported utility functions:\n"
+          "usage - prints this message\n"
+          "build - creates a blank database named db.db\n"
+          "add (domain name) (email address) - inserts a new domain to monitor "
+          "into db.db\n"
+          "removemonitor (domain name) - removes a domain from being monitored\n"
+          "removeentry (domain name) - removes an identified domain from the "
+          "found entries\n"
+          "dump (file name) - Writes the contents of the found domain name "
+          "table into the file in CSV format")
 
 def dump():
     with open(sys.argv[2],'wb') as csvfile:
@@ -26,34 +30,36 @@ def dump():
             csvoutput.writerow(entryItem)
         conn.close()
 
-def build():
+def sql_execute(stmt, arglist=None):
+    """Execute the SQL statement."""
     conn = sqlite3.connect('db.db')
     c = conn.cursor()
-    c.execute("CREATE TABLE lookupTable(emailAddy text,domainName text)")
-    c.execute("CREATE TABLE foundDomains(domainName text, info text)")
+    if arglist is not None:
+        c.execute(stmt, arglist)
+    else:
+        c.execute(stmt)
     conn.commit()
     conn.close()
+
+def build():
+    """Create tables."""
+    sql_execute("CREATE TABLE lookupTable(emailAddy text,domainName text)")
+    sql_execute("CREATE TABLE foundDomains(domainName text, info text)")
 
 def addDomain():
-    conn = sqlite3.connect('db.db')
-    c = conn.cursor()
-    c.execute("INSERT INTO lookupTable VALUES (\"%s\",\"%s\")" % (sys.argv[3],sys.argv[2]))
-    conn.commit()
-    conn.close()
+    stmt = "INSERT INTO lookupTable VALUES (?, ?)"
+    arglist = (sys.argv[3],sys.argv[2])
+    sql_execute(stmt, arglist)
 
 def removeDomain():
-    conn = sqlite3.connect('db.db')
-    c = conn.cursor()
-    c.execute("DELETE FROM lookupTable WHERE lookupTable.domainName = \"%s\"" % (sys.argv[2]))
-    conn.commit()
-    conn.close()
+    stmt = "DELETE FROM lookupTable WHERE lookupTable.domainName = ?"
+    arglist = (sys.argv[2])
+    sql_execute(stmt, arglist)
 
 def removeEntry():
-    conn = sqlite3.connect('db.db')
-    c = conn.cursor()
-    c.execute("DELETE FROM foundDomains WHERE foundDomains.domainName = \"%s\"" % (sys.argv[2]))
-    conn.commit()
-    conn.close()
+    stmt = "DELETE FROM foundDomains WHERE foundDomains.domainName = ?"
+    arglist = sys.argv[2]
+    sql_execute(stmt, arglist)
 
 functions = {'build': build,
              'usage': usage,
