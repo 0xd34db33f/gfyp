@@ -5,21 +5,33 @@ import sqlite3
 import sys
 import csv
 
+BOLD = "\033[1m"
+END = "\033[0m"
+
 def usage():
     """Print usage info."""
-    print("GFYP Utilities\n"
-          "python utils.py (utility function argument) (function parameters "
-          "space separated)\n"
-          "Current supported utility functions:\n"
-          "usage - prints this message\n"
-          "build - creates a blank database named db.db\n"
-          "add (domain name) (email address) - inserts a new domain to monitor "
-          "into db.db\n"
-          "removemonitor (domain name) - removes a domain from being monitored\n"
-          "removeentry (domain name) - removes an identified domain from the "
-          "found entries\n"
-          "dump (file name) - Writes the contents of the found domain name "
-          "table into the file in CSV format")
+    usage_str = (
+        "GFYP Utilities\n"
+        "usage: python utils.py <$BOLD$command$END$> [command parameters space "
+        "separated]\n"
+        "Commands:\n"
+        "    $BOLD$usage$END$ - prints this message\n"
+        "    $BOLD$build$END$ - creates a blank database named db.db\n"
+        "    $BOLD$add$END$ (domain name) (email address) - inserts a new "
+        "domain to monitor into db.db\n"
+        "    $BOLD$removemonitor$END$ (domain name) - removes a domain from "
+        "being monitored\n"
+        "    $BOLD$removeentry$END$ (domain name) - removes an identified "
+        "domain from the found entries\n"
+        "    $BOLD$dump$END$ (file name) - Writes the contents of the found "
+        "domain name table into the file in CSV format")
+    _pretty_print(usage_str)
+
+def _pretty_print(string):
+    string = string.replace('$BOLD$', BOLD)
+    string = string.replace('$END$', END)
+    print string
+
 
 def dump():
     """Write database to CSV file."""
