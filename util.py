@@ -1,9 +1,9 @@
 #!/usr/bin/python
 """A utility for maintaining the GFYP database."""
 
-import sqlite3
 import sys
 import csv
+import gfyp_db #gfyp_db.py
 
 BOLD = "\033[1m"
 END = "\033[0m"
@@ -12,7 +12,7 @@ def usage():
     """Print usage info."""
     usage_str = (
         "GFYP Utilities\n"
-        "usage: python utils.py <$BOLD$command$END$> [command parameters space "
+        "usage: python util.py <$BOLD$command$END$> [command parameters space "
         "separated]\n"
         "Commands:\n"
         "    $BOLD$usage$END$ - prints this message\n"
@@ -26,58 +26,59 @@ def usage():
         "    $BOLD$dump$END$ (file name) - Writes the contents of the found "
         "domain name table into the file in CSV format")
     _pretty_print(usage_str)
+    sys.exit()
 
 def _pretty_print(string):
     string = string.replace('$BOLD$', BOLD)
     string = string.replace('$END$', END)
     print string
 
-
 def dump():
     """Write database to CSV file."""
-    with open(sys.argv[2], 'wb') as csvfile:
-        csvoutput = csv.writer(csvfile)
-        conn = sqlite3.connect('db.db')
-        cur = conn.cursor()
-        found_entries = cur.execute("SELECT * FROM foundDomains")
-        entries_iter = found_entries.fetchall()
-        for entry in entries_iter:
-            csvoutput.writerow(entry)
-        conn.close()
-
-def sql_execute(stmt, arglist=None):
-    """Execute the SQL statement."""
-    conn = sqlite3.connect('db.db')
-    cur = conn.cursor()
-    if arglist is not None:
-        cur.execute(stmt, arglist)
-    else:
-        cur.execute(stmt)
-    conn.commit()
-    conn.close()
+    filename = sys.argv[2]
+    with gfyp_db.DatabaseConnection() as db_con:
+        with open(filename, 'wb') as csvfile:
+            csvoutput = csv.writer(csvfile)
+            found_entries = db_con.get_all_found_domains()
+            entries_iter = found_entries.fetchall()
+            for entry in entries_iter:
+                csvoutput.writerow(entry)
+    print "Wrote %d entries to '%s'." % (len(entries_iter), filename)
 
 def build():
     """Create tables."""
-    sql_execute("CREATE TABLE lookupTable(emailAddy text,domainName text)")
-    sql_execute("CREATE TABLE foundDomains(domainName text, info text)")
+    with gfyp_db.DatabaseConnection() as db_con:
+        is_err = db_con.table_init()
+        err_msg = ", but with errors"
+        print "Database is initalized%s." % (err_msg if is_err else '')
 
 def add_domain():
-    """Inserts a new domain to monitor"""
-    stmt = "INSERT INTO lookupTable VALUES (?, ?)"
-    arglist = (sys.argv[3], sys.argv[2])
-    sql_execute(stmt, arglist)
+    """Inserts a new domain to monitor
+
+    Todos:
+        * Should not add another record if <domain, email> pair is already
+            present. Can do this by checking in Python or SQL constraint.
+    """
+    if len(sys.argv) != 4:
+        usage()
+    domain_name = sys.argv[2]
+    email_notif_addr = sys.argv[3]
+
+    with gfyp_db.DatabaseConnection() as db_con:
+        db_con.add_watch_entry(domain_name, email_notif_addr)
 
 def remove_domain():
     """Removes a domain from being monitored"""
-    stmt = "DELETE FROM lookupTable WHERE lookupTable.domainName = ?"
-    arglist = (sys.argv[2])
-    sql_execute(stmt, arglist)
+    domain_name = sys.argv[2]
+    with gfyp_db.DatabaseConnection() as db_con:
+        db_con.delete_watch_entry(domain_name)
 
 def remove_entry():
     """Removes an identified domain from the list of found entries"""
-    stmt = "DELETE FROM foundDomains WHERE foundDomains.domainName = ?"
-    arglist = sys.argv[2]
-    sql_execute(stmt, arglist)
+    domain_name = sys.argv[2]
+
+    with gfyp_db.DatabaseConnection() as db_con:
+        db_con.delete_found_domain(domain_name)
 
 FUNCTIONS = {'build': build,
              'usage': usage,
