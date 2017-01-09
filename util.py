@@ -5,8 +5,11 @@ import sys
 import csv
 import gfyp_db #gfyp_db.py
 
-BOLD = "\033[1m"
-END = "\033[0m"
+BOLD = ""
+END = ""
+if sys.platform != 'win32' and sys.stdout.isatty():
+    BOLD = "\033[1m"
+    END = "\033[0m"
 
 def usage():
     """Print usage info."""
