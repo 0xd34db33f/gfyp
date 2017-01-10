@@ -20,6 +20,7 @@ import smtplib
 
 from dnslib import dnslib #dnslib.py
 import gfyp_db #gfyp_db.py
+from common import pretty_print #common.py
 
 #SET EMAIL SETTINGS HERE IF NOT USING ENVIRONMENT VARIABLES
 EMAIL_USERNAME = None
@@ -54,9 +55,49 @@ def send_email(smtp_auth, recipient, subject, body):
 
     print "Email sent to %s." % recipient
 
+def check_and_send_alert(smtp_auth, alert_email, domain, escape_email=False,
+                         db_con=None):
+    """Consult DB whether an alert needs to be sent for domain, and send one.
+    Args:
+        smtp_auth (dict): Credentials for SMTP server, including 'username',
+            'password', and 'server'.
+        alert_email (str)
+        domain (str)
+        escape_email (bool): Whether or not to escape periods in the email body
+            in order to avoid spam filtering. (Default: False)
+        db_con (None or `gfyp_db.DatabaseConnection`): This can optionally
+            provide a database connection to reuse. Otherwise, a new one will
+            be created.
+    """
+    print "Now checking %s - %s" % (alert_email, domain)
+    close_db = False
+    if db_con is None:
+        db_con = gfyp_db.DatabaseConnection()
+        close_db = True
+    body = ""
+    dns_check = dnslib()
+    entries = dns_check.checkDomain(domain)
+    print "DNSTwist found %d variant domains from %s." % (len(entries), domain)
+    for domain_found, domain_info in entries:
+        found_entries = db_con.get_matching_found_domains(domain_found)
+        entries_iter = found_entries.fetchall()
+
+        if len(entries_iter) == 0:
+            db_con.add_discovered_domain(domain_found, domain_info)
+            body += "\r\n\r\n%s - %s" % (domain_found, domain_info)
+
+    if body != "":
+        recipient = alert_email
+        subject = 'GFYP - New Entries for %s' % domain
+        send_email(smtp_auth, recipient, subject, body)
+
+    if close_db:
+        db_con.conn.close()
+
 def main():
     """Description: Search for new domain variants and email alerts for new ones.
     """
+    args = get_args()
     #Get configuration from env variables or fallback to hard-coded values
     smtp_auth = dict()
     smtp_auth['username'] = os.getenv('GFYP_EMAIL_USERNAME', EMAIL_USERNAME)
@@ -70,32 +111,49 @@ def main():
         print("WARNING: You have hard-coded credentials into a code file. Do "
               "not commit it to a public Git repo!")
 
-    dns_check = dnslib()
     with gfyp_db.DatabaseConnection() as db_con:
         domain_entries = db_con.get_watch_entries()
 
         if len(domain_entries) == 0:
-            print "No domains have been added for watching/alerts. Use util.py to add domains."
+            print("No domains have been added for watching/alerts. Use util.py "
+                  "to add domains.")
 
         for row in domain_entries:
             alert_email = row[0]
             domain = row[1]
-            print "Now checking %s - %s" % (alert_email, domain)
-            body = ""
-            entries = dns_check.checkDomain(domain)
-            print "DNSTwist found %d variant domains from %s." % (len(entries), domain)
-            for domain_found, domain_info in entries:
-                found_entries = db_con.get_matching_found_domains(domain_found)
-                entries_iter = found_entries.fetchall()
+            check_and_send_alert(
+                smtp_auth, alert_email, domain,
+                escape_email=args['escape_email'], db_con=db_con)
 
-                if len(entries_iter) == 0:
-                    db_con.add_discovered_domain(domain_found, domain_info)
-                    body += "\r\n\r\n%s - %s" % (domain_found, domain_info)
+def usage():
+    """Print usage info."""
+    usage_str = (
+        "GFYP Core - Find domain variants and send alerts\n"
+        "usage: python core.py [$BOLD$-escapealert$END$]\n"
+        "Options:\n"
+        "    $BOLD$-escapealert$END$ - Escape periods in email alert to avoid "
+        "spam filter")
+    pretty_print(usage_str)
+    sys.exit()
 
-            if body != "":
-                recipient = alert_email
-                subject = 'GFYP - New Entries for %s' % domain
-                send_email(smtp_auth, recipient, subject, body)
+def get_args():
+    """Get command line arguments.
+
+    Current arguments:
+        * escape_alert (bool): Whether to escape periods in alert email.
+    """
+    args = dict()
+    args['escape_alert'] = False
+    if len(sys.argv) == 1:
+        return args
+    elif len(sys.argv) == 2:
+        if sys.argv[1] == '-escapealert':
+            args['escape_alert'] = True
+        else:
+            usage()
+    else:
+        usage()
+    return args
 
 if __name__ == "__main__":
     main()
