@@ -55,7 +55,7 @@ def send_email(smtp_auth, recipient, subject, body):
 
     print "Email sent to %s." % recipient
 
-def check_and_send_alert(smtp_auth, alert_email, domain, escape_email=False,
+def check_and_send_alert(smtp_auth, alert_email, domain, escape_alert=False,
                          db_con=None):
     """Consult DB whether an alert needs to be sent for domain, and send one.
     Args:
@@ -63,7 +63,7 @@ def check_and_send_alert(smtp_auth, alert_email, domain, escape_email=False,
             'password', and 'server'.
         alert_email (str)
         domain (str)
-        escape_email (bool): Whether or not to escape periods in the email body
+        escape_alert (bool): Whether or not to escape periods in the email body
             in order to avoid spam filtering. (Default: False)
         db_con (None or `gfyp_db.DatabaseConnection`): This can optionally
             provide a database connection to reuse. Otherwise, a new one will
@@ -89,6 +89,8 @@ def check_and_send_alert(smtp_auth, alert_email, domain, escape_email=False,
     if body != "":
         recipient = alert_email
         subject = 'GFYP - New Entries for %s' % domain
+        if escape_alert:
+            body = body.replace('.', '[.]')
         send_email(smtp_auth, recipient, subject, body)
 
     if close_db:
@@ -123,7 +125,7 @@ def main():
             domain = row[1]
             check_and_send_alert(
                 smtp_auth, alert_email, domain,
-                escape_email=args['escape_email'], db_con=db_con)
+                escape_alert=args['escape_alert'], db_con=db_con)
 
 def usage():
     """Print usage info."""
