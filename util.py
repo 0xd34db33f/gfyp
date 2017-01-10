@@ -4,12 +4,7 @@
 import sys
 import csv
 import gfyp_db #gfyp_db.py
-
-BOLD = ""
-END = ""
-if sys.platform != 'win32' and sys.stdout.isatty():
-    BOLD = "\033[1m"
-    END = "\033[0m"
+from common import pretty_print #common.py
 
 def usage():
     """Print usage info."""
@@ -28,13 +23,8 @@ def usage():
         "domain from the found entries\n"
         "    $BOLD$dump$END$ (file name) - Writes the contents of the found "
         "domain name table into the file in CSV format")
-    _pretty_print(usage_str)
+    pretty_print(usage_str)
     sys.exit()
-
-def _pretty_print(string):
-    string = string.replace('$BOLD$', BOLD)
-    string = string.replace('$END$', END)
-    print string
 
 def dump():
     """Write database to CSV file."""
