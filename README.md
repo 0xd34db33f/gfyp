@@ -13,13 +13,13 @@ This tool augments [dnstwist](https://github.com/elceef/dnstwist) with a databas
 following environment variables:
     * `GFYP_EMAIL_USERNAME`
     * `GFYP_EMAIL_PASSWORD`
-    * `GFYP_EMAIL_STMPSERVER`
+    * `GFYP_EMAIL_SMTPSERVER`
 
 Ex.
 
     $ export GFYP_EMAIL_USERNAME=alice@example.com
     $ export GFYP_EMAIL_PASSWORD=ilovemallory
-    $ export GFYP_EMAIL_STMPSERVER=smtp.example.com
+    $ export GFYP_EMAIL_SMTPSERVER=smtp.example.com
 
 ## Usage
 

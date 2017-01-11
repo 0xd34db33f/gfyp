@@ -25,7 +25,7 @@ from common import pretty_print #common.py
 #SET EMAIL SETTINGS HERE IF NOT USING ENVIRONMENT VARIABLES
 EMAIL_USERNAME = None
 EMAIL_PASSWORD = None
-EMAIL_STMPSERVER = None
+EMAIL_SMTPSERVER = None
 
 def send_email(smtp_auth, recipient, subject, body):
     """Send email via SMTP.
@@ -104,12 +104,12 @@ def main():
     smtp_auth = dict()
     smtp_auth['username'] = os.getenv('GFYP_EMAIL_USERNAME', EMAIL_USERNAME)
     smtp_auth['password'] = os.getenv('GFYP_EMAIL_PASSWORD', EMAIL_PASSWORD)
-    smtp_auth['server'] = os.getenv('GFYP_EMAIL_STMPSERVER', EMAIL_STMPSERVER)
+    smtp_auth['server'] = os.getenv('GFYP_EMAIL_SMTPSERVER', EMAIL_SMTPSERVER)
     for key, value in smtp_auth.iteritems():
         if value is None:
             sys.exit("Fatal error: Email setting '%s' has not been set." % key)
 
-    if any([EMAIL_USERNAME, EMAIL_PASSWORD, EMAIL_STMPSERVER]):
+    if any([EMAIL_USERNAME, EMAIL_PASSWORD, EMAIL_SMTPSERVER]):
         print("WARNING: You have hard-coded credentials into a code file. Do "
               "not commit it to a public Git repo!")
 
