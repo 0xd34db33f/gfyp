@@ -1,5 +1,8 @@
 """Shared functions and constants"""
 import sys
+import logging
+
+LOG_FILENAME = 'gfyp.log'
 
 BOLD = ""
 END = ""
@@ -12,3 +15,21 @@ def pretty_print(string):
     string = string.replace('$BOLD$', BOLD)
     string = string.replace('$END$', END)
     print string
+
+def log(msg, level=logging.INFO):
+    """Add a string to the log file."""
+    logging.basicConfig(filename=LOG_FILENAME,
+                        format='%(asctime)s:%(levelname)s:%(message)s',
+                        level=logging.INFO)
+    if level == logging.DEBUG:
+        logging.debug(msg)
+    elif level == logging.INFO:
+        logging.info(msg)
+    elif level == logging.WARNING:
+        logging.warning(msg)
+    elif level == logging.ERROR:
+        logging.error(msg)
+    elif level == logging.CRITICAL:
+        logging.critical(msg)
+    else:
+        raise ValueError(str(level))

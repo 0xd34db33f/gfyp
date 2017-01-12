@@ -17,10 +17,11 @@
 import os
 import sys
 import smtplib
+import logging
 
 from dnslib import dnslib #dnslib.py
 import gfyp_db #gfyp_db.py
-from common import pretty_print #common.py
+from common import pretty_print, log #common.py
 
 #SET EMAIL SETTINGS HERE IF NOT USING ENVIRONMENT VARIABLES
 EMAIL_USERNAME = None
@@ -50,10 +51,13 @@ def send_email(smtp_auth, recipient, subject, body):
         server_ssl.sendmail(smtp_auth['username'], email_to, message)
         server_ssl.close()
     except Exception, err:
-        #TODO: log me
-        sys.exit("Failed to send mail: %s" % str(err))
+        msg = "Failed to send mail: %s" % str(err)
+        log(msg, logging.ERROR)
+        sys.exit(msg)
 
-    print "Email sent to %s." % recipient
+    msg = "Email sent to %s." % recipient
+    print msg
+    log(msg)
 
 def check_and_send_alert(smtp_auth, alert_email, domain, escape_alert=False,
                          db_con=None):
@@ -69,7 +73,9 @@ def check_and_send_alert(smtp_auth, alert_email, domain, escape_alert=False,
             provide a database connection to reuse. Otherwise, a new one will
             be created.
     """
-    print "Now checking %s - %s" % (alert_email, domain)
+    msg = "Now checking %s - %s" % (alert_email, domain)
+    print msg
+    log(msg)
     close_db = False
     if db_con is None:
         db_con = gfyp_db.DatabaseConnection()
@@ -77,7 +83,10 @@ def check_and_send_alert(smtp_auth, alert_email, domain, escape_alert=False,
     body = ""
     dns_check = dnslib()
     entries = dns_check.checkDomain(domain)
-    print "DNSTwist found %d variant domains from %s." % (len(entries), domain)
+    msg = "DNSTwist found %d variant domains from %s." % (len(entries), domain)
+    print msg
+    log(msg)
+    num_new_entries = 0
     for domain_found, domain_info in entries:
         found_entries = db_con.get_matching_found_domains(domain_found)
         entries_iter = found_entries.fetchall()
@@ -85,6 +94,7 @@ def check_and_send_alert(smtp_auth, alert_email, domain, escape_alert=False,
         if len(entries_iter) == 0:
             db_con.add_discovered_domain(domain_found, domain_info)
             body += "\r\n\r\n%s - %s" % (domain_found, domain_info)
+            num_new_entries += 1
 
     if body != "":
         recipient = alert_email
@@ -92,6 +102,10 @@ def check_and_send_alert(smtp_auth, alert_email, domain, escape_alert=False,
         if escape_alert:
             body = body.replace('.', '[.]')
         send_email(smtp_auth, recipient, subject, body)
+
+    msg = "Found %d new domain variants from %s" % (num_new_entries, domain)
+    print msg
+    log(msg)
 
     if close_db:
         db_con.conn.close()
@@ -107,18 +121,24 @@ def main():
     smtp_auth['server'] = os.getenv('GFYP_EMAIL_SMTPSERVER', EMAIL_SMTPSERVER)
     for key, value in smtp_auth.iteritems():
         if value is None:
-            sys.exit("Fatal error: Email setting '%s' has not been set." % key)
+            msg = "Fatal error: Email setting '%s' has not been set." % key
+            log(msg, logging.ERROR)
+            sys.exit(msg)
 
     if any([EMAIL_USERNAME, EMAIL_PASSWORD, EMAIL_SMTPSERVER]):
-        print("WARNING: You have hard-coded credentials into a code file. Do "
-              "not commit it to a public Git repo!")
+        msg = ("WARNING: You have hard-coded credentials into a code file. Do "
+               "not commit it to a public Git repo!")
+        print(msg)
+        log(msg, logging.WARNING)
 
     with gfyp_db.DatabaseConnection() as db_con:
         domain_entries = db_con.get_watch_entries()
 
         if len(domain_entries) == 0:
-            print("No domains have been added for watching/alerts. Use util.py "
-                  "to add domains.")
+            msg = ("No domains have been added for watching/alerts. Use "
+                   "util.py to add domains.")
+            print msg
+            log(msg)
 
         for row in domain_entries:
             alert_email = row[0]
@@ -152,8 +172,10 @@ def get_args():
         if sys.argv[1] == '-escapealert':
             args['escape_alert'] = True
         else:
+            log("Invalid arguments: %s" % sys.argv, logging.ERROR)
             usage()
     else:
+        log("Invalid arguments: %s" % sys.argv, logging.ERROR)
         usage()
     return args
 

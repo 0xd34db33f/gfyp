@@ -3,8 +3,9 @@
 
 import sys
 import csv
+import logging
 import gfyp_db #gfyp_db.py
-from common import pretty_print #common.py
+from common import pretty_print, log #common.py
 
 def usage():
     """Print usage info."""
@@ -43,7 +44,10 @@ def build():
     with gfyp_db.DatabaseConnection() as db_con:
         is_err = db_con.table_init()
         err_msg = ", but with errors"
-        print "Database is initalized%s." % (err_msg if is_err else '')
+        msg = "Database is initalized%s." % (err_msg if is_err else '')
+        print msg
+        log_level = logging.ERROR if is_err else logging.INFO
+        log(msg, log_level)
 
 def add_domain():
     """Inserts a new domain to monitor
@@ -53,6 +57,8 @@ def add_domain():
             present. Can do this by checking in Python or SQL constraint.
     """
     if len(sys.argv) != 4:
+        log("Incorrect number of arguments for adding domain: %s" % sys.argv,
+            logging.ERROR)
         usage()
     domain_name = sys.argv[2]
     email_notif_addr = sys.argv[3]
@@ -82,6 +88,7 @@ FUNCTIONS = {'build': build,
 
 if __name__ == "__main__":
     if len(sys.argv) < 2 or sys.argv[1] not in FUNCTIONS:
+        log("Invalid arguments: %s" % sys.argv, logging.ERROR)
         usage()
     else:
         # python util.py (utility function argument) (function parameters space separated)
