@@ -1,15 +1,35 @@
-# GFYP - Go "Find Your" Phishers
+# GFYP - Go Find Your Phishers
 
-Having experimented with dnstwist for some time now, it dawned on me that it could be useful for alerting of new domains as they pop up related to your domains of interest. 
-
-For more information on dnstwist, see https://github.com/elceef/dnstwist
+This tool augments [dnstwist](https://github.com/elceef/dnstwist) with a database that tracks identified phishing sites over times, and provides email alerts when new ones are discovered.
 
 ## Installation
-* pip install -r requirements.txt
-* Add notification email information (username/password) to the top of core.py
-* python util.py build
-* python util.py add (domain name) (email address)
-* python core.py (or set it as a cron job)  - Start getting information reports hourly.
 
-## Notes
-Yes I know some of the coding is horrible. I'm going to be cleaning it up sometime in the next few weeks here when I get some time, just wanting to share it for now.
+    $ pip install -r requirements.txt
+
+## Configuration
+
+1. Initialize database with `python util.py build`
+2. Either add your SMTP credentials by hard-coding them in core.py, or set the
+following environment variables:
+    * `GFYP_EMAIL_USERNAME`
+    * `GFYP_EMAIL_PASSWORD`
+    * `GFYP_EMAIL_STMPSERVER`
+
+Ex.
+
+    $ export GFYP_EMAIL_USERNAME=alice@example.com
+    $ export GFYP_EMAIL_PASSWORD=ilovemallory
+    $ export GFYP_EMAIL_STMPSERVER=smtp.example.com
+
+## Usage
+
+    # add domain to list for which to hunt phishing domains
+    python util.py add (domain name) (email address)
+    # start searching process
+    python core.py # or set it as a cron job to regular reports
+
+## Troubleshooting
+
+### GMail
+
+If using GMail as an SMTP provider, you may first need to log into GMail in the web interface and enable the "Allow less secure apps" option in the "Sign-in & security" section.
