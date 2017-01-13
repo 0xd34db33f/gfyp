@@ -1,5 +1,7 @@
 """Functions for interacting with the database."""
 import sqlite3
+import logging
+from common import log #common.py
 
 DB_FILENAME_DEFAULT = 'db.db'
 
@@ -22,49 +24,59 @@ class DatabaseConnection(object):
     def __exit__(self, exec_type, exec_value, exec_traceback):
         self.conn.close()
 
+    def _create_table(self, stmt):
+        try:
+            self.sql_execute(stmt)
+        except sqlite3.OperationalError, err:
+            msg = "Error creating table: %s" % str(err)
+            print msg
+            log(msg, logging.ERROR)
+            return True
+        return False
+
     def table_init(self):
         """Initialize database with required tables.
 
         Return: bool: Whether any errors were encounterd.
         """
-        is_err = False
-        try:
-            self.sql_execute(
-                "CREATE TABLE lookupTable(emailAddy text, domainName text)")
-        except sqlite3.OperationalError, err:
-            print "Error creating table: %s" % str(err)
-            is_err = True
-
-        try:
-            self.sql_execute(
-                "CREATE TABLE foundDomains(domainName text, info text)")
-        except sqlite3.OperationalError, err:
-            print "Error creating table: %s" % str(err)
-            is_err = True
-        return is_err
+        stmt1 = "CREATE TABLE lookupTable(emailAddy text, domainName text)"
+        stmt2 = "CREATE TABLE foundDomains(domainName text, info text)"
+        return self._create_table(stmt1) or self._create_table(stmt2)
 
     def add_watch_entry(self, domain_name, alert_email):
         """Add a domain to monitor for phishing variants."""
         stmt = "INSERT INTO lookupTable VALUES (?, ?)"
         arglist = (alert_email, domain_name)
         num_changes = self.sql_execute(stmt, arglist)
+        msg = ""
+        log_level = logging.INFO
         if num_changes == 1:
-            print "Added domain %s for monitoring." % domain_name
+            msg = "Added domain %s for monitoring." % domain_name
         elif num_changes == 0:
-            print "No domains added for monitoring! Already present?"
+            msg = "No domains added for monitoring! Already present?"
+            log_level = logging.WARNING
         else:
-            print "Made more database changes (%d) than expected!" % num_changes
+            msg = "Made more database changes (%d) than expected!" % num_changes
+            log_level = logging.ERROR
+
+        print msg
+        log(msg, log_level)
 
     def delete_watch_entry(self, domain_name):
         """Delete all entries for monitoring for specified domain."""
         stmt = "DELETE FROM lookupTable WHERE lookupTable.domainName = ?"
         arglist = (domain_name,)
         num_changes = self.sql_execute(stmt, arglist)
+        msg = ""
+        log_level = logging.INFO
         if num_changes == 0:
-            print "No domains removed from monitoring! Not already present?"
+            msg = "No domains removed from monitoring! Not already present?"
+            log_level = logging.WARNING
         else:
-            print("Removed %s from monitoring and removed %d alert%s." %
-                  (domain_name, num_changes, 's' if num_changes != 1 else ''))
+            msg = ("Removed %s from monitoring and removed %d alert%s." %
+                   (domain_name, num_changes, 's' if num_changes != 1 else ''))
+        print msg
+        log(msg, log_level)
 
     def get_watch_entries(self):
         """Get a list of (email, domain) entries monitored for phishing variants.
@@ -89,13 +101,20 @@ class DatabaseConnection(object):
         stmt = "DELETE FROM foundDomains WHERE foundDomains.domainName = ?"
         arglist = (domain_name,)
         num_changes = self.sql_execute(stmt, arglist)
+        msg = ""
+        log_level = logging.INFO
         if num_changes == 0:
-            print "No domains removed from list! Not previously found?"
+            msg = "No domains removed from list! Not previously found?"
+            log_level = logging.WARNING
         elif num_changes == 1:
-            print("Removed domain %s from list of previously discovered domains." %
-                  domain_name)
+            msg = ("Removed domain %s from list of previously discovered domains." %
+                   domain_name)
         else:
-            print "Made more database changes (%d) than expected!" % num_changes
+            msg = "Made more database changes (%d) than expected!" % num_changes
+            log_level = logging.ERROR
+
+        print msg
+        log(msg, log_level)
 
     def get_matching_found_domains(self, domain_name):
         """Get list of (domain, info) previously found matching specified domain.
