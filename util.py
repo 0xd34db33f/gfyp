@@ -37,7 +37,7 @@ def dump():
             entries_iter = found_entries.fetchall()
             for entry in entries_iter:
                 csvoutput.writerow(entry)
-    print "Wrote %d entries to '%s'." % (len(entries_iter), filename)
+    print("Wrote %d entries to '%s'." % (len(entries_iter), filename))
 
 def build():
     """Create tables."""
@@ -45,7 +45,7 @@ def build():
         is_err = db_con.table_init()
         err_msg = ", but with errors"
         msg = "Database is initalized%s." % (err_msg if is_err else '')
-        print msg
+        print(msg)
         log_level = logging.ERROR if is_err else logging.INFO
         log(msg, log_level)
 

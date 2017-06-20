@@ -14,7 +14,7 @@ def pretty_print(string):
     """For *nix systems, augment TTY output. For others, strip such syntax."""
     string = string.replace('$BOLD$', BOLD)
     string = string.replace('$END$', END)
-    print string
+    print(string)
 
 def log(msg, level=logging.INFO):
     """Add a string to the log file."""

@@ -27,9 +27,9 @@ class DatabaseConnection(object):
     def _create_table(self, stmt):
         try:
             self.sql_execute(stmt)
-        except sqlite3.OperationalError, err:
+        except sqlite3.OperationalError as err:
             msg = "Error creating table: %s" % str(err)
-            print msg
+            print(msg)
             log(msg, logging.ERROR)
             return True
         return False
@@ -59,7 +59,7 @@ class DatabaseConnection(object):
             msg = "Made more database changes (%d) than expected!" % num_changes
             log_level = logging.ERROR
 
-        print msg
+        print(msg)
         log(msg, log_level)
 
     def delete_watch_entry(self, domain_name):
@@ -75,7 +75,7 @@ class DatabaseConnection(object):
         else:
             msg = ("Removed %s from monitoring and removed %d alert%s." %
                    (domain_name, num_changes, 's' if num_changes != 1 else ''))
-        print msg
+        print(msg)
         log(msg, log_level)
 
     def get_watch_entries(self):
@@ -113,7 +113,7 @@ class DatabaseConnection(object):
             msg = "Made more database changes (%d) than expected!" % num_changes
             log_level = logging.ERROR
 
-        print msg
+        print(msg)
         log(msg, log_level)
 
     def get_matching_found_domains(self, domain_name):

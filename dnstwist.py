@@ -36,7 +36,10 @@ import json
 try:
 	import queue
 except ImportError:
-	import Queue as queue
+	if sys.version_info[0] == 2:
+		import Queue as queue
+	else:
+		import queue as queue
 
 try:
 	import dns.resolver

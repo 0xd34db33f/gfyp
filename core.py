@@ -50,13 +50,13 @@ def send_email(smtp_auth, recipient, subject, body):
         server_ssl.login(smtp_auth['username'], smtp_auth['password'])
         server_ssl.sendmail(smtp_auth['username'], email_to, message)
         server_ssl.close()
-    except Exception, err:
+    except Exception as err:
         msg = "Failed to send mail: %s" % str(err)
         log(msg, logging.ERROR)
         sys.exit(msg)
 
     msg = "Email sent to %s." % recipient
-    print msg
+    print(msg)
     log(msg)
 
 def check_and_send_alert(smtp_auth, alert_email, domain, escape_alert=False,
@@ -74,7 +74,7 @@ def check_and_send_alert(smtp_auth, alert_email, domain, escape_alert=False,
             be created.
     """
     msg = "Now checking %s - %s" % (alert_email, domain)
-    print msg
+    print(msg)
     log(msg)
     close_db = False
     if db_con is None:
@@ -84,7 +84,7 @@ def check_and_send_alert(smtp_auth, alert_email, domain, escape_alert=False,
     dns_check = dnslib()
     entries = dns_check.checkDomain(domain)
     msg = "DNSTwist found %d variant domains from %s." % (len(entries), domain)
-    print msg
+    print(msg)
     log(msg)
     num_new_entries = 0
     for domain_found, domain_info in entries:
@@ -104,7 +104,7 @@ def check_and_send_alert(smtp_auth, alert_email, domain, escape_alert=False,
         send_email(smtp_auth, recipient, subject, body)
 
     msg = "Found %d new domain variants from %s" % (num_new_entries, domain)
-    print msg
+    print(msg)
     log(msg)
 
     if close_db:
@@ -119,7 +119,7 @@ def main():
     smtp_auth['username'] = os.getenv('GFYP_EMAIL_USERNAME', EMAIL_USERNAME)
     smtp_auth['password'] = os.getenv('GFYP_EMAIL_PASSWORD', EMAIL_PASSWORD)
     smtp_auth['server'] = os.getenv('GFYP_EMAIL_SMTPSERVER', EMAIL_SMTPSERVER)
-    for key, value in smtp_auth.iteritems():
+    for key, value in smtp_auth.items():
         if value is None:
             msg = "Fatal error: Email setting '%s' has not been set." % key
             log(msg, logging.ERROR)
@@ -137,7 +137,7 @@ def main():
         if len(domain_entries) == 0:
             msg = ("No domains have been added for watching/alerts. Use "
                    "util.py to add domains.")
-            print msg
+            print(msg)
             log(msg)
 
         for row in domain_entries:
