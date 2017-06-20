@@ -4,6 +4,7 @@ import logging
 from common import log #common.py
 
 DB_FILENAME_DEFAULT = 'db.db'
+DB_SCHEMA_VERSION = 0
 
 class DatabaseConnection(object):
     """A connection to the database.
@@ -41,7 +42,8 @@ class DatabaseConnection(object):
         """
         stmt1 = "CREATE TABLE lookupTable(emailAddy text, domainName text)"
         stmt2 = "CREATE TABLE foundDomains(domainName text, info text)"
-        return self._create_table(stmt1) or self._create_table(stmt2)
+        stmt3 = "PRAGMA user_version = %s" % str(DB_SCHEMA_VERSION)
+        return self._create_table(stmt1) or self._create_table(stmt2) or self._create_table(stmt3)
 
     def add_watch_entry(self, domain_name, alert_email):
         """Add a domain to monitor for phishing variants."""
@@ -138,6 +140,13 @@ class DatabaseConnection(object):
         arglist = (domain_name, domain_info)
         cur.execute(stmt, arglist)
         self.conn.commit()
+
+    def is_db_current(self):
+        """Gets the user_version from the db and checks to see if it matches the current schema number"""
+        cur = self.conn.cursor()
+        stmt = "PRAGMA user_version"
+        info = cur.execute(stmt)
+        return DB_SCHEMA_VERSION == (info.fetchone())[0]
 
     def sql_execute(self, stmt, arglist=None):
         """Execute the SQL statement and return number of db changes."""

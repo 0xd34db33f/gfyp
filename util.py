@@ -4,6 +4,9 @@
 import sys
 import csv
 import logging
+import shutil
+from datetime import datetime
+
 import gfyp_db #gfyp_db.py
 from common import pretty_print, log #common.py
 
@@ -37,7 +40,7 @@ def dump():
             entries_iter = found_entries.fetchall()
             for entry in entries_iter:
                 csvoutput.writerow(entry)
-    print("Wrote %d entries to '%s'." % (len(entries_iter), filename))
+    print(("Wrote %d entries to '%s'." % (len(entries_iter), filename)))
 
 def build():
     """Create tables."""
@@ -79,12 +82,30 @@ def remove_entry():
     with gfyp_db.DatabaseConnection() as db_con:
         db_con.delete_found_domain(domain_name)
 
+def migrate():
+    """Update the database to the current schema version"""
+    with gfyp_db.DatabaseConnection() as db_con:
+        is_err = db_con.is_db_current()
+
+    if not is_err:
+        msg = "Updating database to most recent version"
+        dst = "db.bak.%s" % str(datetime.now())
+        shutil.move("db.db",dst)
+        build()
+    else:
+        msg = "Database is currently at the most recent schema version. No changes necessary."
+
+    print(msg)
+    log_level = logging.ERROR if is_err else logging.INFO
+    log(msg,log_level)
+
 FUNCTIONS = {'build': build,
              'usage': usage,
              'add': add_domain,
              'removeentry' : remove_entry,
              'removemonitor' : remove_domain,
-             'dump' : dump}
+             'dump' : dump,
+             'migrate' : migrate}
 
 if __name__ == "__main__":
     if len(sys.argv) < 2 or sys.argv[1] not in FUNCTIONS:

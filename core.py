@@ -119,7 +119,7 @@ def main():
     smtp_auth['username'] = os.getenv('GFYP_EMAIL_USERNAME', EMAIL_USERNAME)
     smtp_auth['password'] = os.getenv('GFYP_EMAIL_PASSWORD', EMAIL_PASSWORD)
     smtp_auth['server'] = os.getenv('GFYP_EMAIL_SMTPSERVER', EMAIL_SMTPSERVER)
-    for key, value in smtp_auth.items():
+    for key, value in list(smtp_auth.items()):
         if value is None:
             msg = "Fatal error: Email setting '%s' has not been set." % key
             log(msg, logging.ERROR)
@@ -132,20 +132,25 @@ def main():
         log(msg, logging.WARNING)
 
     with gfyp_db.DatabaseConnection() as db_con:
-        domain_entries = db_con.get_watch_entries()
+        if db_con.is_db_current():
+            domain_entries = db_con.get_watch_entries()
 
-        if len(domain_entries) == 0:
-            msg = ("No domains have been added for watching/alerts. Use "
-                   "util.py to add domains.")
+            if len(domain_entries) == 0:
+                msg = ("No domains have been added for watching/alerts. Use "
+                       "util.py to add domains.")
+                print(msg)
+                log(msg)
+
+            for row in domain_entries:
+                alert_email = row[0]
+                domain = row[1]
+                check_and_send_alert(
+                    smtp_auth, alert_email, domain,
+                    escape_alert=args['escape_alert'], db_con=db_con)
+        else:
+            msg = "GFYP database is not current. Please run 'python util.py migrate' to update to the current schema"
             print(msg)
-            log(msg)
-
-        for row in domain_entries:
-            alert_email = row[0]
-            domain = row[1]
-            check_and_send_alert(
-                smtp_auth, alert_email, domain,
-                escape_alert=args['escape_alert'], db_con=db_con)
+            log(msg,logging.ERROR)
 
 def usage():
     """Print usage info."""
