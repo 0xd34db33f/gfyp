@@ -26,7 +26,9 @@ def usage():
         "    $BOLD$removeentry$END$ (domain name) - removes an identified "
         "domain from the found entries\n"
         "    $BOLD$dump$END$ (file name) - Writes the contents of the found "
-        "domain name table into the file in CSV format")
+        "domain name table into the file in CSV format\n"
+        "    $BOLD$migrate$END$ - Upgrades the GFYP database to the most "
+        "recent schema format")
     pretty_print(usage_str)
     sys.exit()
 
@@ -53,12 +55,7 @@ def build():
         log(msg, log_level)
 
 def add_domain():
-    """Inserts a new domain to monitor
-
-    Todos:
-        * Should not add another record if <domain, email> pair is already
-            present. Can do this by checking in Python or SQL constraint.
-    """
+    """Inserts a new domain to monitor"""
     if len(sys.argv) != 4:
         log("Incorrect number of arguments for adding domain: %s" % sys.argv,
             logging.ERROR)
@@ -84,20 +81,35 @@ def remove_entry():
 
 def migrate():
     """Update the database to the current schema version"""
-    with gfyp_db.DatabaseConnection() as db_con:
-        is_err = db_con.is_db_current()
+    is_curr = False
+    db_ver = 0
 
-    if not is_err:
-        msg = "Updating database to most recent version"
+    with gfyp_db.DatabaseConnection() as db_con:
+        is_curr = db_con.is_db_current()
+        db_ver = db_con.get_version()
+
+    if not is_curr:
         dst = "db.bak.%s" % str(datetime.now())
+        msg = "Updated database to most recent version - Existing database stored as: %s" % dst
         shutil.move("db.db",dst)
         build()
+        if db_ver == 0:
+            # Case db_ver == 0: Needs to be modified to account for UNIQUE monitor domains
+            with gfyp_db.DatabaseConnection() as db_con:
+                with gfyp_db.DatabaseConnection(filename=dst) as old_db_con:
+                    existing_watch_entries = old_db_con.get_watch_entries()
+                    for entry in existing_watch_entries:
+                        db_con.add_watch_entry(entry[1],entry[0])
+
+                    existing_found_entries = old_db_con.get_all_found_domains()
+                    entries_iter = existing_found_entries.fetchall()
+                    for entry in entries_iter:
+                        db_con.add_discovered_domain(entry[0],entry[1])
     else:
         msg = "Database is currently at the most recent schema version. No changes necessary."
 
     print(msg)
-    log_level = logging.ERROR if is_err else logging.INFO
-    log(msg,log_level)
+    log(msg,logging.INFO)
 
 FUNCTIONS = {'build': build,
              'usage': usage,

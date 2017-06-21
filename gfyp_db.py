@@ -4,7 +4,7 @@ import logging
 from common import log #common.py
 
 DB_FILENAME_DEFAULT = 'db.db'
-DB_SCHEMA_VERSION = 0
+DB_SCHEMA_VERSION = 1
 
 class DatabaseConnection(object):
     """A connection to the database.
@@ -40,7 +40,7 @@ class DatabaseConnection(object):
 
         Return: bool: Whether any errors were encounterd.
         """
-        stmt1 = "CREATE TABLE lookupTable(emailAddy text, domainName text)"
+        stmt1 = "CREATE TABLE lookupTable(emailAddy text, domainName text UNIQUE)"
         stmt2 = "CREATE TABLE foundDomains(domainName text, info text)"
         stmt3 = "PRAGMA user_version = %s" % str(DB_SCHEMA_VERSION)
         return self._create_table(stmt1) or self._create_table(stmt2) or self._create_table(stmt3)
@@ -49,17 +49,14 @@ class DatabaseConnection(object):
         """Add a domain to monitor for phishing variants."""
         stmt = "INSERT INTO lookupTable VALUES (?, ?)"
         arglist = (alert_email, domain_name)
-        num_changes = self.sql_execute(stmt, arglist)
-        msg = ""
-        log_level = logging.INFO
-        if num_changes == 1:
+        try:
+            num_changes = self.sql_execute(stmt, arglist)
+            msg = ""
+            log_level = logging.INFO
             msg = "Added domain %s for monitoring." % domain_name
-        elif num_changes == 0:
-            msg = "No domains added for monitoring! Already present?"
+        except sqlite3.IntegrityError:
+            msg = "No domains added for monitoring! Already present? - %s" % domain_name
             log_level = logging.WARNING
-        else:
-            msg = "Made more database changes (%d) than expected!" % num_changes
-            log_level = logging.ERROR
 
         print(msg)
         log(msg, log_level)
@@ -147,6 +144,13 @@ class DatabaseConnection(object):
         stmt = "PRAGMA user_version"
         info = cur.execute(stmt)
         return DB_SCHEMA_VERSION == (info.fetchone())[0]
+
+    def get_version(self):
+        """Gets the user_version from the db and returns the value"""
+        cur = self.conn.cursor()
+        stmt = "PRAGMA user_version"
+        info = cur.execute(stmt)
+        return (info.fetchone())[0]
 
     def sql_execute(self, stmt, arglist=None):
         """Execute the SQL statement and return number of db changes."""
