@@ -28,7 +28,9 @@ def usage():
         "    $BOLD$dump$END$ (file name) - Writes the contents of the found "
         "domain name table into the file in CSV format\n"
         "    $BOLD$migrate$END$ - Upgrades the GFYP database to the most "
-        "recent schema format")
+        "recent schema format\n"
+        "    $BOLD$addnote$END$ (domain name) (note in quotes)- Add a note "
+        "to a discovered domain entry")
     pretty_print(usage_str)
     sys.exit()
 
@@ -111,13 +113,21 @@ def migrate():
     print(msg)
     log(msg,logging.INFO)
 
+def addnote():
+    """Add a note for a found domain"""
+    domain_name = sys.argv[2]
+    note = sys.argv[3]
+    with gfyp_db.DatabaseConnection() as db_con:
+        db_con.add_note(domain_name,note)
+
 FUNCTIONS = {'build': build,
              'usage': usage,
              'add': add_domain,
              'removeentry' : remove_entry,
              'removemonitor' : remove_domain,
              'dump' : dump,
-             'migrate' : migrate}
+             'migrate' : migrate,
+             'addnote' : addnote}
 
 if __name__ == "__main__":
     if len(sys.argv) < 2 or sys.argv[1] not in FUNCTIONS:

@@ -1,4 +1,6 @@
 db.*
+*.db
 *.pyc
 *.log
 *.bak
+*.csv

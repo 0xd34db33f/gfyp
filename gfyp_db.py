@@ -41,7 +41,7 @@ class DatabaseConnection(object):
         Return: bool: Whether any errors were encounterd.
         """
         stmt1 = "CREATE TABLE lookupTable(emailAddy text, domainName text UNIQUE)"
-        stmt2 = "CREATE TABLE foundDomains(domainName text, info text)"
+        stmt2 = "CREATE TABLE foundDomains(domainName text, info text, notes text,dateFound integer)"
         stmt3 = "PRAGMA user_version = %s" % str(DB_SCHEMA_VERSION)
         return self._create_table(stmt1) or self._create_table(stmt2) or self._create_table(stmt3)
 
@@ -126,6 +126,13 @@ class DatabaseConnection(object):
         info_entries = cur.execute(stmt, arglist)
         return info_entries
 
+    def get_found_domains_last_seven_days(self):
+        """Get list of found domain entries from last seven days"""
+        cur = self.conn.cursor()
+        stmt = "SELECT * from foundDomains where strftime('%s','now') - dateFound < 604800"
+        info_entries = cur.execute(stmt)
+        return info_entries
+
     def add_discovered_domain(self, domain_name, domain_info):
         """Add a new domain to list of domains discovered by dnstwist.
         Args:
@@ -133,8 +140,8 @@ class DatabaseConnection(object):
             domain_info (str): Additiona DNS information from DNS lookup.
         """
         cur = self.conn.cursor()
-        stmt = "INSERT INTO foundDomains VALUES (?, ?)"
-        arglist = (domain_name, domain_info)
+        stmt = "INSERT INTO foundDomains VALUES (?, ?, ?, strftime('%s','now'))"
+        arglist = (domain_name, domain_info,"")
         cur.execute(stmt, arglist)
         self.conn.commit()
 
@@ -151,6 +158,14 @@ class DatabaseConnection(object):
         stmt = "PRAGMA user_version"
         info = cur.execute(stmt)
         return (info.fetchone())[0]
+
+    def add_note(self,domain_name, note):
+        """Adds a note to a discovered domain"""
+        cur = self.conn.cursor()
+        stmt = "UPDATE foundDomains SET notes = ? WHERE domainName = ?"
+        arglist = (note,domain_name)
+        cur.execute(stmt,arglist)
+        self.conn.commit()
 
     def sql_execute(self, stmt, arglist=None):
         """Execute the SQL statement and return number of db changes."""
