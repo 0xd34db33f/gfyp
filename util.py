@@ -19,8 +19,8 @@ def usage():
         "Commands:\n"
         "    $BOLD$usage$END$ - prints this message\n"
         "    $BOLD$build$END$ - creates a blank database named db.db\n"
-        "    $BOLD$add$END$ (domain name) (email address) - inserts a new "
-        "domain to monitor into db.db\n"
+        "    $BOLD$add$END$ (domain name) (email address) [optional: filename of csv file containing additional tlds] - inserts a new "
+        "domain(s) to monitor into db.db\n"
         "    $BOLD$removemonitor$END$ (domain name) - removes a domain from "
         "being monitored\n"
         "    $BOLD$removeentry$END$ (domain name) - removes an identified "
@@ -58,15 +58,23 @@ def build():
 
 def add_domain():
     """Inserts a new domain to monitor"""
-    if len(sys.argv) != 4:
+    if len(sys.argv) != 4 and len(sys.argv) != 5:
         log("Incorrect number of arguments for adding domain: %s" % sys.argv,
             logging.ERROR)
         usage()
-    domain_name = sys.argv[2]
     email_notif_addr = sys.argv[3]
-
+    domain_list = []
+    domain_list.append(sys.argv[2])
+    if len(sys.argv) == 5:
+        #Looks like a TLD file is present, add them as well
+        baseName = ((sys.argv[2]).rsplit('.'))[0]
+        with open(sys.argv[4],'rb') as csvfile:
+            csvreader = csv.reader(csvfile)
+            for tld in csvreader:
+                domain_list.append(baseName+"."+tld[0])
     with gfyp_db.DatabaseConnection() as db_con:
-        db_con.add_watch_entry(domain_name, email_notif_addr)
+        for domain in domain_list:
+            db_con.add_watch_entry(domain, email_notif_addr)
 
 def remove_domain():
     """Removes a domain from being monitored"""

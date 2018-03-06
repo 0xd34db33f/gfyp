@@ -1,6 +1,6 @@
-db.*
-*.db
-*.pyc
-*.log
-*.bak
-*.csv
+/db.*
+/*.db
+/*.pyc
+/*.log
+/*.bak
+/*.csv
