@@ -24,7 +24,7 @@ Ex.
 ## Usage
 
     # add domain to list for which to hunt phishing domains
-    python util.py add (domain name) (email address)
+    python util.py add (domain name) (email address) [optional: path to csv containing additional TLDs to check]
     # start searching process
     python core.py # or set it as a cron job to regular reports
 
